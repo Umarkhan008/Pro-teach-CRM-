@@ -54,6 +54,9 @@
       "eas": {
         "projectId": "197c2a0b-2f40-461c-92c8-f899593bd30c"
       }
+    },
+    "experiments": {
+      "baseUrl": "/Pro-teach-CRM-/"
     }
   }
 }
