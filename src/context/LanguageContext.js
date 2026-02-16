@@ -3,7 +3,12 @@ import React, { createContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { translations } from '../constants/translations';
 
-export const LanguageContext = createContext();
+// Provide default value to prevent "Property 't' doesn't exist" errors
+export const LanguageContext = createContext({
+    language: 'en',
+    changeLanguage: () => { },
+    t: translations.en
+});
 
 export const LanguageProvider = ({ children }) => {
     const [language, setLanguage] = useState('en'); // Default to English

@@ -31,7 +31,7 @@ const ForgotPasswordScreen = ({ navigation }) => {
             return;
         }
 
-        setIsLoading(true);
+        showLoader();
         try {
             let user = null;
             let collectionName = '';
@@ -54,7 +54,7 @@ const ForgotPasswordScreen = ({ navigation }) => {
             if (user) {
                 if (!user.email) {
                     Alert.alert("Xatolik", "Profilingizda email topilmadi. Parolni tiklash uchun administratorga murojaat qiling.");
-                    setIsLoading(false);
+                    hideLoader();
                     return;
                 }
                 setFoundUser({ ...user, collectionName });
@@ -112,7 +112,7 @@ const ForgotPasswordScreen = ({ navigation }) => {
             return;
         }
 
-        setIsLoading(true);
+        showLoader();
         try {
             const userRef = doc(db, foundUser.collectionName, foundUser.id);
             await updateDoc(userRef, {
@@ -128,7 +128,7 @@ const ForgotPasswordScreen = ({ navigation }) => {
             console.error(error);
             Alert.alert("Xatolik", "Parolni yangilashda xatolik yuz berdi");
         } finally {
-            setIsLoading(false);
+            hideLoader();
         }
     };
 

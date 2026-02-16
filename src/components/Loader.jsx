@@ -1,127 +1,176 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, Dimensions, ActivityIndicator } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Animated, Dimensions, Modal } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { COLORS, FONTS } from '../constants/theme';
 import { useUI } from '../context/UIContext';
+import { Ionicons } from '@expo/vector-icons';
 
 const { width, height } = Dimensions.get('window');
 
 const Loader = () => {
     const { isLoading, loadingText } = useUI();
+    const [isVisible, setIsVisible] = useState(isLoading);
     const fadeAnim = useRef(new Animated.Value(0)).current;
-    const scaleAnim = useRef(new Animated.Value(0.8)).current;
+
+    // Custom Brand Animation
+    const pulseAnim = useRef(new Animated.Value(1)).current;
+    const rotateAnim = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
         if (isLoading) {
-            Animated.parallel([
-                Animated.timing(fadeAnim, {
+            setIsVisible(true);
+            // Appear Instantly (<20ms)
+            Animated.timing(fadeAnim, {
+                toValue: 1,
+                duration: 10,
+                useNativeDriver: true,
+            }).start();
+
+            // Reset animations
+            pulseAnim.setValue(1);
+            rotateAnim.setValue(0);
+
+            // Start Loops
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(pulseAnim, {
+                        toValue: 1.2,
+                        duration: 800,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(pulseAnim, {
+                        toValue: 1,
+                        duration: 800,
+                        useNativeDriver: true,
+                    })
+                ])
+            ).start();
+
+            Animated.loop(
+                Animated.timing(rotateAnim, {
                     toValue: 1,
-                    duration: 300,
+                    duration: 2000,
                     useNativeDriver: true,
-                }),
-                Animated.spring(scaleAnim, {
-                    toValue: 1,
-                    friction: 8,
-                    tension: 40,
-                    useNativeDriver: true,
-                }),
-            ]).start();
+                })
+            ).start();
+
         } else {
-            Animated.parallel([
-                Animated.timing(fadeAnim, {
-                    toValue: 0,
-                    duration: 200,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(scaleAnim, {
-                    toValue: 0.8,
-                    duration: 200,
-                    useNativeDriver: true,
-                }),
-            ]).start();
+            // Disappear Fast but Smooth
+            Animated.timing(fadeAnim, {
+                toValue: 0,
+                duration: 200,
+                useNativeDriver: true,
+            }).start(() => {
+                setIsVisible(false);
+            });
         }
     }, [isLoading]);
 
-    if (!isLoading && fadeAnim._value === 0) return null;
+    const spin = rotateAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['0deg', '360deg']
+    });
+
+    if (!isVisible) return null;
 
     return (
-        <Animated.View
-            style={[
-                styles.container,
-                {
-                    opacity: fadeAnim,
-                    pointerEvents: isLoading ? 'auto' : 'none'
-                }
-            ]}
+        <Modal
+            transparent
+            visible={isVisible}
+            animationType="none"
+            statusBarTranslucent={true}
         >
-            <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+            <Animated.View
+                style={[
+                    styles.container,
+                    {
+                        opacity: fadeAnim,
+                    }
+                ]}
+            >
+                <BlurView intensity={30} tint="light" style={StyleSheet.absoluteFill} />
+                <View style={[styles.backgroundOverlay, { backgroundColor: 'rgba(255,255,255,0.7)' }]} />
 
-            <Animated.View style={[styles.loaderCard, { transform: [{ scale: scaleAnim }] }]}>
-                <View style={styles.spinnerContainer}>
-                    <ActivityIndicator size="large" color={COLORS.primary} />
-                    <View style={styles.innerDot} />
+                <View style={styles.content}>
+                    {/* Brand Logo / Custom Spinner */}
+                    <View style={styles.iconWrapper}>
+                        <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+                            <View style={styles.brandCircle}>
+                                <Ionicons name="school" size={32} color={COLORS.primary} />
+                            </View>
+                        </Animated.View>
+
+                        {/* Orbiting Dot */}
+                        <Animated.View style={[styles.orbitContainer, { transform: [{ rotate: spin }] }]}>
+                            <View style={styles.orbitDot} />
+                        </Animated.View>
+                    </View>
+
+                    {loadingText ? (
+                        <Text style={styles.text}>{loadingText}</Text>
+                    ) : (
+                        <Text style={styles.text}>Ma'lumotlar yuklanmoqda...</Text>
+                    )}
                 </View>
-
-                {loadingText ? (
-                    <Text style={styles.text}>{loadingText}</Text>
-                ) : (
-                    <Text style={styles.text}>Yuklanmoqda...</Text>
-                )}
             </Animated.View>
-        </Animated.View>
+        </Modal>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        width: width,
-        height: height,
-        zIndex: 9999,
+        flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+        backgroundColor: 'transparent',
     },
-    loaderCard: {
-        width: 150,
-        height: 150,
-        backgroundColor: 'rgba(255, 255, 255, 0.9)',
-        borderRadius: 25,
+    backgroundOverlay: {
+        ...StyleSheet.absoluteFillObject,
+    },
+    content: {
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    iconWrapper: {
+        width: 80,
+        height: 80,
         justifyContent: 'center',
         alignItems: 'center',
-        shadowColor: "#000",
-        shadowOffset: {
-            width: 0,
-            height: 10,
-        },
-        shadowOpacity: 0.1,
-        shadowRadius: 20,
-        elevation: 10,
+        marginBottom: 20,
     },
-    spinnerContainer: {
+    brandCircle: {
         width: 60,
         height: 60,
+        borderRadius: 30,
+        backgroundColor: COLORS.white,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 15,
+        elevation: 5,
+        shadowColor: COLORS.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 10,
     },
-    innerDot: {
+    orbitContainer: {
         position: 'absolute',
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        backgroundColor: COLORS.primary,
-        opacity: 0.3,
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    orbitDot: {
+        position: 'absolute',
+        top: 0,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: COLORS.secondary,
     },
     text: {
-        ...FONTS.body4,
-        color: '#333',
+        ...FONTS.h4,
+        color: COLORS.primary,
         fontWeight: '600',
-        textAlign: 'center',
-        paddingHorizontal: 10,
+        letterSpacing: 0.5,
     }
 });
 

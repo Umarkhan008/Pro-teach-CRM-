@@ -1,12 +1,14 @@
 import React from 'react';
 import { View, Text, Dimensions, StyleSheet } from 'react-native';
-import { LineChart, BarChart } from 'react-native-chart-kit';
+import { LineChart, BarChart, PieChart, ProgressChart } from 'react-native-chart-kit';
 import { COLORS, SIZES, FONTS } from '../constants/theme';
 import globalStyles from '../styles/globalStyles';
 
 const screenWidth = Dimensions.get('window').width;
 
-const Chart = ({ title, data, type = 'line', height = 220 }) => {
+const Chart = ({ title, data, type = 'line', height = 220, width, style }) => {
+    const chartWidth = width || (screenWidth - (SIZES.padding * 2) - (SIZES.padding * 1.5));
+
     const chartConfig = {
         backgroundGradientFrom: COLORS.surface,
         backgroundGradientTo: COLORS.surface,
@@ -20,35 +22,73 @@ const Chart = ({ title, data, type = 'line', height = 220 }) => {
             r: "4",
             strokeWidth: "2",
             stroke: COLORS.primary
-        }
+        },
+        // For Pie Chart labels
+        color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
     };
 
-    return (
-        <View style={[globalStyles.card, globalStyles.shadow, styles.container]}>
-            <Text style={styles.title}>{title}</Text>
+    const renderChart = () => {
+        switch (type) {
+            case 'line':
+                return (
+                    <LineChart
+                        data={data}
+                        width={chartWidth}
+                        height={height}
+                        chartConfig={chartConfig}
+                        bezier
+                        style={styles.chart}
+                        withInnerLines={false}
+                        withOuterLines={false}
+                    />
+                );
+            case 'bar':
+                return (
+                    <BarChart
+                        data={data}
+                        width={chartWidth}
+                        height={height}
+                        chartConfig={chartConfig}
+                        style={styles.chart}
+                        showValuesOnTopOfBars
+                        withInnerLines={false}
+                    />
+                );
+            case 'pie':
+                return (
+                    <PieChart
+                        data={data}
+                        width={chartWidth}
+                        height={height}
+                        chartConfig={chartConfig}
+                        accessor={"population"}
+                        backgroundColor={"transparent"}
+                        paddingLeft={"15"}
+                        center={[10, 0]}
+                        absolute
+                    />
+                );
+            case 'progress':
+                return (
+                    <ProgressChart
+                        data={data}
+                        width={chartWidth}
+                        height={height}
+                        strokeWidth={16}
+                        radius={32}
+                        chartConfig={chartConfig}
+                        hideLegend={false}
+                    />
+                );
+            default:
+                return null;
+        }
+    }
 
-            {type === 'line' ? (
-                <LineChart
-                    data={data}
-                    width={screenWidth - (SIZES.padding * 2) - (SIZES.padding * 1.5)}
-                    height={height}
-                    chartConfig={chartConfig}
-                    bezier
-                    style={styles.chart}
-                    withInnerLines={false}
-                    withOuterLines={false}
-                />
-            ) : (
-                <BarChart
-                    data={data}
-                    width={screenWidth - (SIZES.padding * 2) - (SIZES.padding * 1.5)}
-                    height={height}
-                    chartConfig={chartConfig}
-                    style={styles.chart}
-                    showValuesOnTopOfBars
-                    withInnerLines={false}
-                />
-            )}
+    return (
+        <View style={[globalStyles.card, globalStyles.shadow, styles.container, style]}>
+            {title && <Text style={styles.title}>{title}</Text>}
+            {renderChart()}
         </View>
     );
 };
@@ -56,6 +96,7 @@ const Chart = ({ title, data, type = 'line', height = 220 }) => {
 const styles = StyleSheet.create({
     container: {
         overflow: 'hidden',
+        justifyContent: 'center'
     },
     title: {
         ...FONTS.h3,
@@ -64,7 +105,7 @@ const styles = StyleSheet.create({
     },
     chart: {
         borderRadius: SIZES.radius,
-        paddingRight: 40, // Add padding for right labels
+        paddingRight: 0,
     }
 });
 

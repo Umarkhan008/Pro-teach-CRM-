@@ -2,6 +2,7 @@
   "expo": {
     "name": "Pro Teach Dashboard",
     "slug": "pro-teach-dashboard",
+    "scheme": "proteach",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -9,7 +10,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#6366f1"
+      "backgroundColor": "#FFA500"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -21,17 +22,34 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#6366f1"
+        "backgroundColor": "#FFA500"
       },
-      "package": "com.proteach.dashboard"
+      "package": "com.proteach.dashboard",
+      "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "name": "Pro Teach",
+      "shortName": "ProTeach",
+      "lang": "uz",
+      "display": "standalone",
+      "backgroundColor": "#FFA500",
+      "themeColor": "#FFA500",
+      "startUrl": "/",
+      "orientation": "portrait"
     },
     "plugins": [
       "expo-asset",
-      "expo-font"
+      "expo-font",
+      "@react-native-community/datetimepicker",
+      "expo-notifications"
     ],
+    "updates": {
+      "url": "https://u.expo.dev/197c2a0b-2f40-461c-92c8-f899593bd30c"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "extra": {
       "eas": {
         "projectId": "197c2a0b-2f40-461c-92c8-f899593bd30c"

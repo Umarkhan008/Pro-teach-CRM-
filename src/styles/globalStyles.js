@@ -5,6 +5,13 @@ const globalStyles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: COLORS.background,
+        ...Platform.select({
+            web: {
+                display: 'flex',
+                height: '100%',
+                overflow: 'hidden',
+            }
+        })
     },
     row: {
         flexDirection: 'row',
@@ -26,26 +33,27 @@ const globalStyles = StyleSheet.create({
         marginBottom: SIZES.base * 2,
         ...Platform.select({
             ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 8,
+                shadowColor: '#a0a0a0',
+                shadowOffset: { width: 0, height: 10 },
+                shadowOpacity: 0.1, // Softer
+                shadowRadius: 20, // Diffused
             },
             android: {
-                elevation: 3,
+                elevation: 4, // Slightly cleaner elevation
+                shadowColor: '#a0a0a0', // Attempt to tint shadow on modern Android
             },
         }),
     },
     shadow: {
         ...Platform.select({
             ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.1,
-                shadowRadius: 10,
+                shadowColor: '#888',
+                shadowOffset: { width: 0, height: 10 },
+                shadowOpacity: 0.15,
+                shadowRadius: 25,
             },
             android: {
-                elevation: 5,
+                elevation: 6,
             },
         }),
     },
@@ -59,10 +67,10 @@ const globalStyles = StyleSheet.create({
         color: COLORS.textSecondary,
     },
     input: {
-        height: 50,
-        backgroundColor: COLORS.background, // Or surface depending on section
+        height: 54,
+        backgroundColor: '#F5F6FA', // Light Gray background
         borderWidth: 1,
-        borderColor: COLORS.border,
+        borderColor: 'transparent', // No border by default
         borderRadius: SIZES.radius,
         paddingHorizontal: SIZES.padding,
         marginBottom: SIZES.base * 2,
@@ -83,6 +91,7 @@ const globalStyles = StyleSheet.create({
     },
     screenPadding: {
         paddingHorizontal: SIZES.padding,
+        paddingTop: SIZES.padding,
         paddingBottom: SIZES.padding * 2,
     },
     fab: {

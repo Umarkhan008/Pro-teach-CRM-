@@ -1,18 +1,18 @@
 import React, { createContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '../config/firebaseConfig';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { Alert } from 'react-native';
 import { useUI } from './UIContext';
 
 export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(true); // Start with true for initial app load
     const [userToken, setUserToken] = useState(null);
     const [userInfo, setUserInfo] = useState(null);
 
-    const { showLoader, hideLoader } = useUI();
+    const { showLoader, hideLoader, setAppInitialized } = useUI();
 
     const login = async (loginVal, password, role) => {
         showLoader('Tizimga kirish...');
@@ -97,6 +97,45 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    const updateProfile = async (updatedData) => {
+        showLoader('Profil yangilanmoqda...');
+        try {
+            const newUserInfo = { ...userInfo, ...updatedData };
+
+            // Persist to Firestore if not hardcoded admin
+            if (userInfo.role !== 'admin') {
+                const collectionName = userInfo.role === 'teacher' ? 'teachers' : 'students';
+                const docRef = doc(db, collectionName, userInfo.id);
+                // Filter out non-firestore fields if necessary, but for now spread is okay
+                // user.id might be the doc id.
+
+                // We should only update specific fields to avoid overwriting critical auth data if not intended
+                const { name, phone, email, avatar } = updatedData;
+                const updatePayload = {};
+                if (name) updatePayload.name = name;
+                if (phone) updatePayload.phone = phone;
+                if (email) updatePayload.email = email;
+                if (avatar) updatePayload.avatar = avatar;
+
+                if (Object.keys(updatePayload).length > 0) {
+                    await updateDoc(docRef, updatePayload);
+                }
+            }
+
+            // Update State
+            setUserInfo(newUserInfo);
+            await AsyncStorage.setItem('userInfo', JSON.stringify(newUserInfo));
+
+            return { success: true };
+        } catch (error) {
+            console.error('Update profile error:', error);
+            Alert.alert('Xatolik', 'Profilni yangilashda xatolik yuz berdi');
+            return { success: false, error };
+        } finally {
+            hideLoader();
+        }
+    };
+
     const logout = () => {
         showLoader('Chiqilmoqda...');
         setUserToken(null);
@@ -108,7 +147,7 @@ export const AuthProvider = ({ children }) => {
 
     const isLoggedIn = async () => {
         try {
-            showLoader();
+            setIsLoading(true);
             let userToken = await AsyncStorage.getItem('userToken');
             let userInfo = await AsyncStorage.getItem('userInfo');
 
@@ -116,10 +155,11 @@ export const AuthProvider = ({ children }) => {
                 setUserToken(userToken);
                 setUserInfo(JSON.parse(userInfo));
             }
-            hideLoader();
         } catch (e) {
             console.log(`isLoggedIn error ${e}`);
-            hideLoader();
+        } finally {
+            setIsLoading(false);
+            setAppInitialized();
         }
     };
 
@@ -128,7 +168,7 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     return (
-        <AuthContext.Provider value={{ login, logout, isLoading, userToken, userInfo }}>
+        <AuthContext.Provider value={{ login, logout, updateProfile, isLoading, userToken, userInfo }}>
             {children}
         </AuthContext.Provider>
     );

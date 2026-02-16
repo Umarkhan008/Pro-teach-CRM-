@@ -1,656 +1,739 @@
-import React, { useState, useContext, useEffect } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity, Text, Modal, TextInput, Alert, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
+import React, { useState, useContext, useMemo } from 'react';
+import {
+    View,
+    StyleSheet,
+    FlatList,
+    TouchableOpacity,
+    Text,
+    Modal,
+    TextInput,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    Image,
+    useWindowDimensions
+} from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import * as ImagePicker from 'expo-image-picker';
+import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 
-import Header from '../components/Header';
-import Input from '../components/Input';
-import ListItem from '../components/ListItem';
 import { COLORS, SIZES, FONTS } from '../constants/theme';
 import globalStyles from '../styles/globalStyles';
-// import { mockData } from '../data/mockData'; // Removed mockData
 import { ThemeContext } from '../context/ThemeContext';
 import { LanguageContext } from '../context/LanguageContext';
 import { SchoolContext } from '../context/SchoolContext';
 import { useUI } from '../context/UIContext';
-import { generateLogin, generatePassword } from '../utils/generateCredentials';
+import ScreenHeader from '../components/ScreenHeader';
+import { LinearGradient } from 'expo-linear-gradient';
+import PremiumModal from '../components/PremiumModal';
+import PremiumInput from '../components/PremiumInput';
+import PremiumButton from '../components/PremiumButton';
+import DesktopDataTable from '../components/DesktopDataTable';
+
+const TEACHER_STATUSES = {
+    'Active': { label: 'Faol', color: '#27AE60', bg: '#E8F7EE' },
+    'On Leave': { label: 'Ta’til', color: '#F2994A', bg: '#FFF4E8' },
+    'Inactive': { label: 'Faol emas', color: '#EB5757', bg: '#FFF0F0' },
+    'No Groups': { label: 'Guruhsiz', color: '#828282', bg: '#F2F2F2' }
+};
 
 const TeachersScreen = () => {
     const navigation = useNavigation();
-    const { theme } = useContext(ThemeContext);
+    const { width } = useWindowDimensions();
+    const { theme, isDarkMode } = useContext(ThemeContext);
     const { t } = useContext(LanguageContext);
-
-
     const { teachers, courses, addTeacher, updateTeacher, deleteTeacher } = useContext(SchoolContext);
     const { showLoader, hideLoader } = useUI();
-    const route = useRoute();
-
-    useEffect(() => {
-        if (route.params?.editTeacher) {
-            handleEdit(route.params.editTeacher);
-            // Clear params after handling to prevent modal reopening on re-focus
-            navigation.setParams({ editTeacher: undefined });
-        }
-    }, [route.params?.editTeacher]);
+    const isDesktop = width >= 1280;
 
     const [search, setSearch] = useState('');
+    const [activeFilter, setActiveFilter] = useState('All'); // All, Active, NoGroups, OnLeave, Inactive
     const [modalVisible, setModalVisible] = useState(false);
-    const [isEditing, setIsEditing] = useState(false);
-    const [editingId, setEditingId] = useState(null);
 
-    // Form State
+    // Step-based Add Flow State
+    const [step, setStep] = useState(1);
     const [name, setName] = useState('');
-    const [subject, setSubject] = useState('');
-    const [email, setEmail] = useState('');
+    const [specialty, setSpecialty] = useState('');
     const [phone, setPhone] = useState('');
-    const [bio, setBio] = useState('');
-    const [avatar, setAvatar] = useState(null);
-    const [login, setLogin] = useState('');
-    const [password, setPassword] = useState('');
-    const [selectedCourses, setSelectedCourses] = useState([]);
+    const [salaryType, setSalaryType] = useState('Fixed'); // Fixed, Percentage
+    const [hoursPerWeek, setHoursPerWeek] = useState('20');
 
-    const filteredTeachers = teachers.filter(teacher =>
-        teacher.name.toLowerCase().includes(search.toLowerCase()) ||
-        teacher.subject.toLowerCase().includes(search.toLowerCase())
-    );
+    const filteredTeachers = useMemo(() => {
+        return teachers.filter(teacher => {
+            const matchesSearch = teacher.name.toLowerCase().includes(search.toLowerCase()) ||
+                (teacher.subject || '').toLowerCase().includes(search.toLowerCase());
 
-    const matchCourse = (courseId) => {
-        if (selectedCourses.includes(courseId)) {
-            setSelectedCourses(selectedCourses.filter(id => id !== courseId));
-        } else {
-            setSelectedCourses([...selectedCourses, courseId]);
-        }
-    };
-
-    const pickImage = async () => {
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.5,
+            let matchesFilter = true;
+            if (activeFilter === 'NoGroups') {
+                matchesFilter = !(teacher.assignedCourses && teacher.assignedCourses.length > 0);
+            } else if (activeFilter !== 'All') {
+                // Map filter to status keys
+                const filterMap = { 'Active': 'Active', 'OnLeave': 'On Leave', 'Inactive': 'Inactive' };
+                matchesFilter = teacher.status === filterMap[activeFilter];
+            }
+            return matchesSearch && matchesFilter;
         });
+    }, [teachers, search, activeFilter]);
 
-        if (!result.canceled) {
-            setAvatar(result.assets[0].uri);
-        }
-    };
-
-    const handleSaveTeacher = () => {
-        if (!name || !subject) {
-            Alert.alert(t.error, 'Please fill in required fields (Name, Subject)');
+    const handleAddTeacher = async () => {
+        if (!name || !specialty) {
+            Alert.alert('Xatolik', 'Iltimos, ism va mutaxassislikni kiriting');
             return;
         }
 
-        const finalLogin = login || generateLogin(name);
-        const finalPassword = password || generatePassword();
-
         const teacherData = {
             name,
-            subject,
-            email,
+            subject: specialty,
             phone,
-            bio,
-            students: isEditing ? (teachers.find(t => t.id === editingId)?.students || 0) : 0,
-            avatar: avatar,
-            login: finalLogin,
-            password: finalPassword,
-            assignedCourses: selectedCourses
+            salaryType,
+            weeklyHours: parseInt(hoursPerWeek),
+            status: 'Active',
+            assignedCourses: [],
+            students: 0,
+            createdAt: new Date().toISOString()
         };
 
-        showLoader('Saqlanmoqda...');
-        try {
-            if (isEditing) {
-                updateTeacher(editingId, teacherData);
-            } else {
-                addTeacher(teacherData);
-                Alert.alert(
-                    "Muvaffaqiyatli",
-                    `O'qituvchi yaratildi!\n\nLogin: ${finalLogin}\nParol: ${finalPassword}`,
-                    [{ text: "OK" }]
-                );
-            }
-            closeModal();
-        } finally {
-            hideLoader();
-        }
+        showLoader('Qo‘shilmoqda...');
+        await addTeacher(teacherData);
+        hideLoader();
+        closeModal();
     };
 
     const closeModal = () => {
         setModalVisible(false);
-        setIsEditing(false);
-        setEditingId(null);
+        setStep(1);
         setName('');
-        setSubject('');
-        setEmail('');
+        setSpecialty('');
         setPhone('');
-        setBio('');
-        setAvatar(null);
-        setLogin('');
-        setPassword('');
-        setSelectedCourses([]);
+        setSalaryType('Fixed');
+        setHoursPerWeek('20');
     };
 
-    const handleEdit = (teacher) => {
-        setIsEditing(true);
-        setEditingId(teacher.id);
-        setName(teacher.name);
-        setSubject(teacher.subject);
-        setEmail(teacher.email || '');
-        setPhone(teacher.phone || '');
-        setBio(teacher.bio || '');
-        setAvatar(teacher.avatar);
-        setLogin(teacher.login || '');
-        setPassword(teacher.password || '');
-        setSelectedCourses(teacher.assignedCourses || []);
-        setModalVisible(true);
-    };
+    // Desktop stats calculation
+    const stats = useMemo(() => {
+        const total = teachers.length;
+        const active = teachers.filter(t => t.status === 'Active').length;
+        const noGroups = teachers.filter(t => !t.assignedCourses?.length).length;
+        const totalStudents = teachers.reduce((sum, t) => sum + (t.students || 0), 0);
+        return { total, active, noGroups, totalStudents };
+    }, [teachers]);
 
-    const handleLongPress = (teacher) => {
-        Alert.alert(
-            "Manage Teacher",
-            `What do you want to do with ${teacher.name}?`,
-            [
-                { text: "Cancel", style: "cancel" },
-                { text: "Edit", onPress: () => handleEdit(teacher) },
-                { text: "Delete", style: "destructive", onPress: () => confirmDelete(teacher.id) }
-            ]
-        );
-    };
+    // Desktop Data Table columns
+    const tableColumns = useMemo(() => [
+        {
+            key: 'name',
+            title: "O'qituvchi",
+            flex: 2,
+            render: (value, item) => (
+                <View style={styles.tableTeacherCell}>
+                    <View style={[styles.tableAvatar, { backgroundColor: `${COLORS.primary}15` }]}>
+                        {item.avatar ? (
+                            <Image source={{ uri: item.avatar }} style={styles.tableAvatarImg} />
+                        ) : (
+                            <Text style={[styles.tableAvatarText, { color: COLORS.primary }]}>
+                                {(item.name || 'T').split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
+                            </Text>
+                        )}
+                    </View>
+                    <View>
+                        <Text style={[styles.tableTeacherName, { color: theme.text }]}>{item.name}</Text>
+                        <Text style={[styles.tableTeacherSpec, { color: theme.textSecondary }]}>{item.subject || 'Instruktor'}</Text>
+                    </View>
+                </View>
+            )
+        },
+        {
+            key: 'phone',
+            title: 'Telefon',
+            flex: 1.2,
+            render: (value) => (
+                <Text style={{ color: theme.textSecondary, fontSize: 13 }}>{value || '-'}</Text>
+            )
+        },
+        {
+            key: 'status',
+            title: 'Holat',
+            flex: 0.9,
+            render: (value) => {
+                const status = TEACHER_STATUSES[value] || TEACHER_STATUSES['Active'];
+                return (
+                    <View style={[styles.statusBadgeTable, { backgroundColor: status.bg }]}>
+                        <Text style={[styles.statusTextTable, { color: status.color }]}>{status.label}</Text>
+                    </View>
+                );
+            }
+        },
+        {
+            key: 'assignedCourses',
+            title: 'Guruhlar',
+            flex: 0.7,
+            align: 'center',
+            render: (value) => (
+                <View style={[styles.countBadge, { backgroundColor: `${theme.primary}10` }]}>
+                    <Feather name="layers" size={12} color={theme.primary} />
+                    <Text style={{ color: theme.primary, fontWeight: '600', fontSize: 12 }}>{value?.length || 0}</Text>
+                </View>
+            )
+        },
+        {
+            key: 'students',
+            title: "O'quvchilar",
+            flex: 0.8,
+            align: 'center',
+            render: (value) => (
+                <Text style={{ color: theme.text, fontWeight: '600' }}>{value || 0}</Text>
+            )
+        },
+        {
+            key: 'weeklyHours',
+            title: 'Soat/hafta',
+            flex: 0.8,
+            align: 'right',
+            render: (value) => {
+                const isOverloaded = (value || 0) > 40;
+                return (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Text style={[styles.hoursText, isOverloaded && { color: COLORS.error }]}>
+                            {value || 0}s
+                        </Text>
+                        {isOverloaded && <Feather name="alert-triangle" size={12} color={COLORS.error} />}
+                    </View>
+                );
+            }
+        },
+    ], [theme, TEACHER_STATUSES]);
 
-    const confirmDelete = (id) => {
-        Alert.alert(
-            "Delete Teacher",
-            "Are you sure you want to delete this teacher?",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Delete",
-                    style: "destructive",
-                    onPress: async () => {
-                        showLoader('O\'chirilmoqda...');
-                        try {
-                            await deleteTeacher(id);
-                        } finally {
-                            hideLoader();
-                        }
-                    }
-                }
-            ]
+    // Row actions for desktop
+    const renderRowActions = (item) => (
+        <>
+            <TouchableOpacity
+                style={[styles.tableActionBtn, { backgroundColor: `${theme.primary}10` }]}
+                onPress={() => navigation.navigate('TeacherDetail', { teacher: item })}
+            >
+                <Feather name="eye" size={14} color={theme.primary} />
+            </TouchableOpacity>
+        </>
+    );
+
+    const TeacherRow = ({ item }) => {
+        const status = TEACHER_STATUSES[item.status] || TEACHER_STATUSES['Active'];
+        const groupsCount = item.assignedCourses?.length || 0;
+        const studentsCount = item.students || 0;
+        const weeklyHours = item.weeklyHours || 0;
+        const isOverloaded = weeklyHours > 40;
+
+        return (
+            <TouchableOpacity
+                style={[styles.teacherRow, { backgroundColor: theme.surface }]}
+                onPress={() => navigation.navigate('TeacherDetail', { teacher: item })}
+            >
+                <View style={[styles.avatarBox, { backgroundColor: COLORS.primary + '10' }]}>
+                    {item.avatar ? (
+                        <Image source={{ uri: item.avatar }} style={styles.avatar} />
+                    ) : (
+                        <Text style={styles.avatarText}>{item.name[0]}</Text>
+                    )}
+                </View>
+
+                <View style={styles.infoCol}>
+                    <Text style={[styles.teacherName, { color: theme.text }]}>{item.name}</Text>
+                    <Text style={styles.teacherSub}>{item.subject || 'Instruktor'}</Text>
+
+                    <View style={styles.statsMiniRow}>
+                        <View style={styles.statMini}>
+                            <Feather name="layers" size={12} color="#828282" />
+                            <Text style={styles.statMiniText}>{groupsCount} guruh</Text>
+                        </View>
+                        <View style={styles.statMini}>
+                            <Feather name="users" size={12} color="#828282" />
+                            <Text style={styles.statMiniText}>{studentsCount} talaba</Text>
+                        </View>
+                    </View>
+                </View>
+
+                <View style={styles.rightCol}>
+                    <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
+                        <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
+                    </View>
+
+                    <View style={styles.workloadBox}>
+                        <Text style={[styles.hoursText, isOverloaded && { color: COLORS.error }]}>
+                            {weeklyHours} s/hafta
+                        </Text>
+                        {isOverloaded && <Feather name="alert-triangle" size={12} color={COLORS.error} />}
+                    </View>
+                </View>
+            </TouchableOpacity>
         );
     };
 
     return (
         <SafeAreaView style={[globalStyles.container, { backgroundColor: theme.background }]} edges={['top']}>
-            <Header title={t.teachers} subtitle={t.ourInstructors || "Our Instructors"} />
-
-            <View style={globalStyles.screenPadding}>
-                <Input
-                    icon="search-outline"
-                    placeholder={t.search || "Search teachers..."}
-                    value={search}
-                    onChangeText={setSearch}
-                />
-
-                <FlatList
-                    data={filteredTeachers}
-                    keyExtractor={item => item.id.toString()}
-                    renderItem={({ item }) => (
-                        <ListItem
-                            title={item.name}
-                            subtitle={item.subject}
-                            image={item.avatar}
-                            onPress={() => navigation.navigate('TeacherDetail', { teacher: item })}
-                            onLongPress={() => handleLongPress(item)}
-                            rightElement={
-                                <View style={[styles.statsContainer, { backgroundColor: theme.background }]}>
-                                    <Ionicons name="people" size={14} color={theme.textSecondary} />
-                                    <Text style={[styles.statsText, { color: theme.textSecondary }]}>{item.students}</Text>
-                                </View>
-                            }
-                        />
-                    )}
-                    contentContainerStyle={{ paddingBottom: 100 }}
-                    showsVerticalScrollIndicator={false}
-                    ListEmptyComponent={
-                        <View style={styles.emptyContainer}>
-                            <Ionicons name="school-outline" size={64} color={theme.textLight} />
-                            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>{t.noResults || "No teachers found"}</Text>
-                        </View>
+            <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={theme.background} />
+            <View style={styles.container}>
+                {/* Premium Header with safe area */}
+                <ScreenHeader
+                    title="O'qituvchi"
+                    subtitle="Instruktorlarni boshqarish"
+                    showBack={true}
+                    rightAction={
+                        isDesktop ? (
+                            <TouchableOpacity
+                                style={styles.desktopAddButton}
+                                onPress={() => setModalVisible(true)}
+                            >
+                                <LinearGradient
+                                    colors={['#667eea', '#764ba2']}
+                                    style={styles.desktopAddButtonGradient}
+                                >
+                                    <Ionicons name="add" size={22} color="#fff" />
+                                    <Text style={styles.desktopAddButtonText}>Yangi O'qituvchi</Text>
+                                </LinearGradient>
+                            </TouchableOpacity>
+                        ) : (
+                            <TouchableOpacity
+                                style={[styles.headerBtn, { backgroundColor: theme.surface }]}
+                                onPress={() => {/* filter logic if any */ }}
+                            >
+                                <Ionicons name="filter-outline" size={22} color={theme.text} />
+                            </TouchableOpacity>
+                        )
                     }
                 />
 
+                {/* Search */}
+                <View style={styles.searchSection}>
+                    <View style={styles.searchBox}>
+                        <Ionicons name="search-outline" size={20} color="#BDBDBD" />
+                        <TextInput
+                            placeholder="Qidirish..."
+                            style={styles.searchInput}
+                            value={search}
+                            onChangeText={setSearch}
+                        />
+                    </View>
+                </View>
 
-            </View>
-
-            <View style={styles.fabContainer}>
-                <TouchableOpacity
-                    style={[styles.extendedFab, globalStyles.shadow]}
-                    onPress={() => {
-                        setIsEditing(false);
-                        setName('');
-                        setSubject('');
-                        setPhone('');
-                        setBio('');
-                        setAvatar(null);
-                        setLogin('');
-                        setPassword('');
-                        setEmail('');
-                        setSelectedCourses([]);
-                        setModalVisible(true);
-                    }}
-                >
-                    <Ionicons name="add" size={24} color={COLORS.white} />
-                    <Text style={styles.fabText}>Add Teacher</Text>
-                </TouchableOpacity>
-            </View>
-
-            {/* Add Teacher Modal - Premium Design */}
-            <Modal
-                animationType="slide"
-                transparent={true}
-                visible={modalVisible}
-                onRequestClose={closeModal}
-            >
-                <KeyboardAvoidingView
-                    behavior={Platform.OS === "ios" ? "padding" : "height"}
-                    style={styles.modalOverlay}
-                >
-                    <View style={[styles.modalView, { backgroundColor: theme.surface }]}>
-                        <View style={styles.modalHeader}>
-                            <View>
-                                <Text style={[styles.modalTitle, { color: theme.text }]}>{isEditing ? "Edit Teacher" : "Add New Teacher"}</Text>
-                                <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>{isEditing ? "Update details & groups" : "Enter instructor details below"}</Text>
-                            </View>
-                            <TouchableOpacity style={[styles.closeBtn, { backgroundColor: theme.background }]} onPress={closeModal}>
-                                <Ionicons name="close" size={20} color={theme.text} />
+                {/* Filters */}
+                <View style={styles.filterSection}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+                        {[
+                            { id: 'All', label: 'Barchasi' },
+                            { id: 'Active', label: 'Faol' },
+                            { id: 'NoGroups', label: 'Guruhsiz' },
+                            { id: 'OnLeave', label: 'Ta’til' },
+                            { id: 'Inactive', label: 'Faol emas' }
+                        ].map(f => (
+                            <TouchableOpacity
+                                key={f.id}
+                                style={[styles.filterChip, activeFilter === f.id && styles.activeFilterChip]}
+                                onPress={() => setActiveFilter(f.id)}
+                            >
+                                <Text style={[styles.filterText, activeFilter === f.id && styles.activeFilterText]}>
+                                    {f.label}
+                                </Text>
                             </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                </View>
+
+                {/* List - Desktop vs Mobile */}
+                {isDesktop ? (
+                    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 0, paddingBottom: 24 }}>
+                        {/* Desktop Stats Cards */}
+                        <View style={styles.desktopStatsRow}>
+                            <View style={[styles.desktopStatCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                                <View style={[styles.statIconBox, { backgroundColor: '#667eea15' }]}>
+                                    <Feather name="users" size={22} color="#667eea" />
+                                </View>
+                                <View>
+                                    <Text style={[styles.statValue, { color: theme.text }]}>{stats.total}</Text>
+                                    <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Jami o'qituvchilar</Text>
+                                </View>
+                            </View>
+                            <View style={[styles.desktopStatCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                                <View style={[styles.statIconBox, { backgroundColor: '#10B98115' }]}>
+                                    <Feather name="check-circle" size={22} color="#10B981" />
+                                </View>
+                                <View>
+                                    <Text style={[styles.statValue, { color: theme.text }]}>{stats.active}</Text>
+                                    <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Faol</Text>
+                                </View>
+                            </View>
+                            <View style={[styles.desktopStatCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                                <View style={[styles.statIconBox, { backgroundColor: '#F59E0B15' }]}>
+                                    <Feather name="alert-circle" size={22} color="#F59E0B" />
+                                </View>
+                                <View>
+                                    <Text style={[styles.statValue, { color: theme.text }]}>{stats.noGroups}</Text>
+                                    <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Guruhsiz</Text>
+                                </View>
+                            </View>
+                            <View style={[styles.desktopStatCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                                <View style={[styles.statIconBox, { backgroundColor: '#8B5CF615' }]}>
+                                    <Feather name="users" size={22} color="#8B5CF6" />
+                                </View>
+                                <View>
+                                    <Text style={[styles.statValue, { color: theme.text }]}>{stats.totalStudents}</Text>
+                                    <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Jami talabalar</Text>
+                                </View>
+                            </View>
                         </View>
 
-                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.formScroll}>
-
-                            {/* Avatar Picker */}
-                            <TouchableOpacity style={styles.avatarSection} onPress={pickImage}>
-                                <View style={[
-                                    styles.addAvatarCircle,
-                                    { borderColor: COLORS.primary, backgroundColor: theme.background },
-                                    avatar && { borderStyle: 'solid', borderWidth: 0 }
-                                ]}>
-                                    {avatar ? (
-                                        <Image source={{ uri: avatar }} style={styles.avatarImage} />
-                                    ) : (
-                                        <Ionicons name="camera" size={30} color={COLORS.primary} />
-                                    )}
-                                </View>
-                                <Text style={[styles.avatarText, { color: COLORS.primary }]}>{avatar ? 'Change Photo' : 'Upload Photo'}</Text>
-                            </TouchableOpacity>
-
-                            <View style={globalStyles.rowBetween}>
-                                <View style={[styles.inputContainer, { width: '48%' }]}>
-                                    <Text style={[styles.label, { color: theme.textSecondary }]}>Full Name *</Text>
-                                    <TextInput
-                                        style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
-                                        placeholder="Ex: John Doe"
-                                        placeholderTextColor={theme.textLight}
-                                        value={name}
-                                        onChangeText={(text) => {
-                                            setName(text);
-                                            if (!isEditing && text.length > 2 && !login) {
-                                                setLogin(generateLogin(text));
-                                                setPassword(generatePassword());
-                                            }
-                                        }}
-                                    />
-                                </View>
-                                <View style={[styles.inputContainer, { width: '48%' }]}>
-                                    <Text style={[styles.label, { color: theme.textSecondary }]}>Subject *</Text>
-                                    <TextInput
-                                        style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
-                                        placeholder="Ex: Math"
-                                        placeholderTextColor={theme.textLight}
-                                        value={subject}
-                                        onChangeText={setSubject}
-                                    />
-                                </View>
+                        {/* Desktop Data Table */}
+                        <DesktopDataTable
+                            columns={tableColumns}
+                            data={filteredTeachers}
+                            onRowPress={(item) => navigation.navigate('TeacherDetail', { teacher: item })}
+                            rowActions={renderRowActions}
+                            emptyMessage="O'qituvchilar topilmadi"
+                        />
+                    </ScrollView>
+                ) : (
+                    <FlatList
+                        data={filteredTeachers}
+                        keyExtractor={item => item.id}
+                        renderItem={({ item }) => <TeacherRow item={item} />}
+                        contentContainerStyle={styles.listPadding}
+                        showsVerticalScrollIndicator={false}
+                        ListEmptyComponent={
+                            <View style={styles.empty}>
+                                <Feather name="user-x" size={48} color="#E0E0E0" />
+                                <Text style={styles.emptyText}>Ma'lumot topilmadi</Text>
                             </View>
+                        }
+                    />
+                )}
 
-                            {/* Credentials Section */}
-                            <View style={[styles.credentialsSection, { backgroundColor: theme.background, borderColor: theme.border }]}>
-                                <View style={globalStyles.rowBetween}>
-                                    <Text style={[styles.sectionTitle, { color: theme.text }]}>Login Credentials</Text>
-                                    {!isEditing && (
-                                        <TouchableOpacity
-                                            style={styles.generateBtn}
-                                            onPress={() => {
-                                                if (!name) {
-                                                    Alert.alert("Error", "Please enter teacher name first");
-                                                    return;
-                                                }
-                                                setLogin(generateLogin(name));
-                                                setPassword(generatePassword());
-                                            }}
-                                        >
-                                            <Ionicons name="refresh" size={16} color={COLORS.primary} />
-                                            <Text style={[styles.generateBtnText, { color: COLORS.primary }]}>Generate</Text>
-                                        </TouchableOpacity>
-                                    )}
-                                </View>
+                {/* FAB */}
+                {!isDesktop && (
+                    <TouchableOpacity style={styles.fab} onPress={() => setModalVisible(true)}>
+                        <Ionicons name="add" size={32} color="white" />
+                    </TouchableOpacity>
+                )}
 
-                                <View style={styles.inputContainer}>
-                                    <Text style={[styles.label, { color: theme.textSecondary }]}>Login</Text>
-                                    <View style={[styles.inputWrapper, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-                                        <Ionicons name="person-outline" size={20} color={theme.textLight} style={styles.inputIcon} />
-                                        <TextInput
-                                            style={[styles.inputFlex, { color: theme.text }]}
-                                            placeholder="Auto-generated or enter"
-                                            placeholderTextColor={theme.textLight}
-                                            value={login}
-                                            onChangeText={setLogin}
-                                            autoCapitalize="none"
-                                        />
-                                    </View>
-                                </View>
+                {/* Add Teacher Modal */}
+                <PremiumModal
+                    visible={modalVisible}
+                    onClose={closeModal}
+                    title="Yangi O'qituvchi Qo'shish"
+                    subtitle="Instruktor ma'lumotlarini kiriting"
+                    headerGradient={['#667eea', '#764ba2']}
+                    footer={
+                        <>
+                            <PremiumButton
+                                title="Bekor qilish"
+                                type="outline"
+                                onPress={closeModal}
+                                style={{ flex: 1 }}
+                            />
+                            <PremiumButton
+                                title="Saqlash"
+                                onPress={handleAddTeacher}
+                                style={{ flex: 1 }}
+                                gradient={['#667eea', '#764ba2']}
+                            />
+                        </>
+                    }
+                >
+                    <PremiumInput
+                        label="F.I.SH *"
+                        placeholder="Masalan: Ali Valiyev"
+                        value={name}
+                        onChangeText={setName}
+                        icon="person-outline"
+                    />
 
-                                <View style={styles.inputContainer}>
-                                    <Text style={[styles.label, { color: theme.textSecondary }]}>Password</Text>
-                                    <View style={[styles.inputWrapper, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-                                        <Ionicons name="lock-closed-outline" size={20} color={theme.textLight} style={styles.inputIcon} />
-                                        <TextInput
-                                            style={[styles.inputFlex, { color: theme.text }]}
-                                            placeholder="Auto-generated or enter"
-                                            placeholderTextColor={theme.textLight}
-                                            value={password}
-                                            onChangeText={setPassword}
-                                            autoCapitalize="none"
-                                        />
-                                    </View>
-                                </View>
-                            </View>
+                    <PremiumInput
+                        label="Mutaxassislik *"
+                        placeholder="Masalan: Senior Frontend"
+                        value={specialty}
+                        onChangeText={setSpecialty}
+                        icon="briefcase-outline"
+                    />
 
+                    <PremiumInput
+                        label="Telefon raqami"
+                        placeholder="+998 90 123 45 67"
+                        value={phone}
+                        onChangeText={setPhone}
+                        keyboardType="phone-pad"
+                        icon="call-outline"
+                    />
 
-                            <View style={styles.inputContainer}>
-                                <Text style={[styles.label, { color: theme.textSecondary }]}>Email Address (for recovery)</Text>
-                                <View style={[styles.inputWrapper, { borderColor: theme.border, backgroundColor: theme.background }]}>
-                                    <Ionicons name="mail-outline" size={20} color={theme.textLight} style={styles.inputIcon} />
-                                    <TextInput
-                                        style={[styles.inputFlex, { color: theme.text }]}
-                                        placeholder="example@mail.com"
-                                        placeholderTextColor={theme.textLight}
-                                        value={email}
-                                        onChangeText={setEmail}
-                                        keyboardType="email-address"
-                                        autoCapitalize="none"
-                                    />
-                                </View>
-                            </View>
+                    <PremiumInput
+                        label="Haftalik dars soati"
+                        placeholder="20"
+                        value={hoursPerWeek}
+                        onChangeText={setHoursPerWeek}
+                        keyboardType="numeric"
+                        icon="time-outline"
+                    />
 
-                            <View style={styles.inputContainer}>
-                                <Text style={[styles.label, { color: theme.textSecondary }]}>Phone Number</Text>
-                                <View style={[styles.inputWrapper, { borderColor: theme.border, backgroundColor: theme.background }]}>
-                                    <Ionicons name="call-outline" size={20} color={theme.textLight} style={styles.inputIcon} />
-                                    <TextInput
-                                        style={[styles.inputFlex, { color: theme.text }]}
-                                        placeholder="+1 234 567 8900"
-                                        placeholderTextColor={theme.textLight}
-                                        value={phone}
-                                        onChangeText={setPhone}
-                                        keyboardType="phone-pad"
-                                    />
-                                </View>
-                            </View>
-
-
-                            <View style={styles.inputContainer}>
-                                <Text style={[styles.label, { color: theme.textSecondary }]}>Bio / Description</Text>
-                                <TextInput
-                                    style={[styles.input, styles.textArea, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
-                                    placeholder="Short description about the teacher..."
-                                    placeholderTextColor={theme.textLight}
-                                    value={bio}
-                                    onChangeText={setBio}
-                                    multiline
-                                    numberOfLines={3}
-                                    textAlignVertical="top"
-                                />
-                            </View>
-
-                            <View style={styles.inputContainer}>
-                                <Text style={[styles.label, { color: theme.textSecondary }]}>Assign Groups</Text>
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
-                                    {courses.map((course) => (
-                                        <TouchableOpacity
-                                            key={course.id}
-                                            style={[
-                                                styles.courseChip,
-                                                selectedCourses.includes(course.id) && { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-                                                { borderColor: theme.border }
-                                            ]}
-                                            onPress={() => matchCourse(course.id)}
-                                        >
-                                            <Text style={[
-                                                styles.courseChipText,
-                                                selectedCourses.includes(course.id) ? { color: COLORS.white } : { color: theme.text }
-                                            ]}>
-                                                {course.title}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-
-                            <TouchableOpacity style={[styles.submitBtn, globalStyles.shadow]} onPress={handleSaveTeacher}>
-                                <Text style={styles.submitBtnText}>{isEditing ? 'Save Changes' : 'Create Teacher Profile'}</Text>
-                            </TouchableOpacity>
-                        </ScrollView>
+                    <View style={styles.inputGroup}>
+                        <Text style={[styles.inputLabel, { color: theme.text }]}>To'lov turi</Text>
+                        <View style={styles.radioGroup}>
+                            {['Fixed', 'Percentage'].map(type => (
+                                <TouchableOpacity
+                                    key={type}
+                                    style={[styles.radioBtn, salaryType === type && styles.activeRadio]}
+                                    onPress={() => setSalaryType(type)}
+                                >
+                                    <Text style={[styles.radioText, salaryType === type && styles.activeRadioText]}>
+                                        {type === 'Fixed' ? 'Fiksirlangan' : 'Foizli'}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
                     </View>
-                </KeyboardAvoidingView>
-            </Modal >
-        </SafeAreaView >
+                </PremiumModal>
+            </View>
+        </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
-    statsContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
-    },
-    statsText: {
-        marginLeft: 4,
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    emptyContainer: {
-        alignItems: 'center',
+    container: { flex: 1 },
+    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 10, marginBottom: 20 },
+    backBtn: { marginRight: 15, width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: 'white' },
+    title: { fontSize: 28, fontWeight: 'bold', color: '#1F2022' },
+    subtitle: { fontSize: 14, color: '#828282', marginTop: 4 },
+    headerBtn: { width: 44, height: 44, borderRadius: 14, backgroundColor: 'white', alignItems: 'center', justifyContent: 'center', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
+    searchSection: { paddingHorizontal: 20, marginBottom: 20 },
+    searchBox: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, height: 54, borderRadius: 16, borderWidth: 1, borderColor: '#E0E0E0', backgroundColor: 'white' },
+    searchInput: { flex: 1, marginLeft: 10, fontSize: 15, color: '#1F2022' },
+    filterSection: { marginBottom: 20 },
+    filterScroll: { paddingHorizontal: 20, gap: 10 },
+    filterChip: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 25, backgroundColor: 'white', borderWidth: 1, borderColor: '#E0E0E0' },
+    activeFilterChip: { backgroundColor: '#1F2022', borderColor: '#1F2022' },
+    filterText: { fontSize: 13, fontWeight: '600', color: '#828282' },
+    activeFilterText: { color: 'white' },
+    listPadding: { paddingHorizontal: 20, paddingBottom: 130 },
+    teacherRow: { flexDirection: 'row', padding: 16, borderRadius: 24, marginBottom: 15, alignItems: 'center', elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2 },
+    avatarBox: { width: 56, height: 56, borderRadius: 20, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+    avatar: { width: '100%', height: '100%' },
+    avatarText: { fontSize: 20, fontWeight: 'bold', color: COLORS.primary },
+    infoCol: { flex: 1, marginLeft: 15 },
+    teacherName: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
+    teacherSub: { fontSize: 13, color: '#828282', marginBottom: 8 },
+    statsMiniRow: { flexDirection: 'row', gap: 12 },
+    statMini: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    statMiniText: { fontSize: 11, color: '#828282' },
+    rightCol: { alignItems: 'flex-end', gap: 8 },
+    statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+    statusText: { fontSize: 10, fontWeight: 'bold' },
+    workloadBox: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    hoursText: { fontSize: 11, color: '#828282', fontWeight: '500' },
+    fab: { position: 'absolute', bottom: 110, right: 20, width: 64, height: 64, borderRadius: 32, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', elevation: 8, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6 },
+    empty: { alignItems: 'center', marginTop: 100, gap: 15 },
+    emptyText: { color: '#BDBDBD', fontSize: 16 },
+    // Modal
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    modalContent: { borderTopLeftRadius: 35, borderTopRightRadius: 35, padding: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 25, maxHeight: '90%' },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
+    modalTitle: { fontSize: 22, fontWeight: 'bold' },
+    closeBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.05)' },
+    inputGroup: { marginBottom: 20 },
+    inputLabel: { fontSize: 14, fontWeight: '700', color: '#828282', marginBottom: 8, marginLeft: 4 },
+    input: { height: 58, borderRadius: 18, paddingHorizontal: 20, fontSize: 16, borderWidth: 1.5 },
+    submitBtn: { backgroundColor: COLORS.primary, height: 58, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginTop: 10, elevation: 4, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+    submitBtnText: { color: 'white', fontWeight: 'bold', fontSize: 18 },
+    radioGroup: { flexDirection: 'row', gap: 12 },
+    radioBtn: { flex: 1, height: 50, borderRadius: 12, backgroundColor: '#F2F2F2', alignItems: 'center', justifyContent: 'center' },
+    activeRadio: { backgroundColor: '#1F2022' },
+    radioText: { color: '#828282', fontWeight: '600' },
+    activeRadioText: { color: 'white' },
+    modalFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 20, gap: 15 },
+    backLink: { padding: 15 },
+    backLinkText: { color: '#828282', fontWeight: '600' },
+    // Desktop Modal Styles
+    modalOverlayCentered: {
         justifyContent: 'center',
-        marginTop: 50,
+        alignItems: 'center',
+        padding: 20,
     },
-    emptyText: {
-        marginTop: 10,
+    modalDesktopContainer: {
+        width: '100%',
+        maxWidth: 700,
     },
-    // Modal Styles
-    modalOverlay: {
-        flex: 1,
-        justifyContent: 'flex-end',
-        backgroundColor: 'rgba(0,0,0,0.5)',
+    modalContentDesktop: {
+        borderRadius: 20,
+        overflow: 'hidden',
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        maxHeight: '90%',
     },
-    modalView: {
-        borderTopLeftRadius: 30,
-        borderTopRightRadius: 30,
-        padding: SIZES.padding,
-        height: '85%', // Taller modal
-        shadowColor: "#000",
-        shadowOffset: {
-            width: 0,
-            height: -10
-        },
-        shadowOpacity: 0.1,
-        shadowRadius: 10,
-        elevation: 10
-    },
-    modalHeader: {
+    modalHeaderGradient: {
+        padding: 24,
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: SIZES.padding,
     },
-    modalTitle: {
-        ...FONTS.h2,
+    modalHeaderTitle: {
+        fontSize: 20,
         fontWeight: 'bold',
+        color: '#fff',
     },
-    modalSubtitle: {
-        ...FONTS.body4,
-        fontSize: 12,
-        marginTop: 2,
-    },
-    closeBtn: {
+    modalCloseButton: {
         width: 36,
         height: 36,
         borderRadius: 18,
-        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.2)',
         justifyContent: 'center',
-    },
-    formScroll: {
-        paddingBottom: 20
-    },
-    avatarSection: {
         alignItems: 'center',
-        marginBottom: SIZES.padding * 1.5,
     },
-    addAvatarCircle: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
+    modalBodyDesktop: {
+        padding: 24,
+    },
+    desktopRow: {
+        flexDirection: 'row',
+        gap: 16,
+    },
+    desktopFooter: {
+        flexDirection: 'row',
+        gap: 12,
+        flex: 1,
+    },
+    footerButton: {
+        flex: 1,
+        height: 52,
+        borderRadius: 14,
+        overflow: 'hidden',
+    },
+    cancelButton: {
+        justifyContent: 'center',
+        alignItems: 'center',
         borderWidth: 2,
-        borderStyle: 'dashed',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 8,
     },
-    avatarText: {
-        fontSize: 12,
+    cancelButtonText: {
+        fontSize: 15,
         fontWeight: '600',
     },
-    inputContainer: {
-        marginBottom: SIZES.padding
-    },
-    label: {
-        ...FONTS.body4,
-        marginBottom: 8,
-        fontWeight: '500',
-    },
-    input: {
-        height: 50,
-        borderRadius: 12, // Softer corners
-        paddingHorizontal: 15,
-        borderWidth: 1,
-        ...FONTS.body3
-    },
-    inputWrapper: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        height: 50,
-        borderRadius: 12,
-        borderWidth: 1,
-        paddingHorizontal: 15,
-    },
-    inputIcon: {
-        marginRight: 10,
-    },
-    inputFlex: {
+    saveButtonGradient: {
         flex: 1,
-        height: '100%',
-        ...FONTS.body3
-    },
-    textArea: {
-        height: 100,
-        paddingTop: 15,
-    },
-    submitBtn: {
-        backgroundColor: COLORS.primary,
-        height: 55,
-        borderRadius: 16, // Premium button style
-        alignItems: 'center',
         justifyContent: 'center',
-        marginTop: SIZES.base,
-        elevation: 4,
-        shadowColor: COLORS.primary,
+        alignItems: 'center',
+    },
+    saveButtonText: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#fff',
+    },
+    desktopAddButton: {
+        borderRadius: 14,
+        overflow: 'hidden',
+        shadowColor: '#667eea',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,
+        elevation: 4,
     },
-    submitBtnText: {
-        color: COLORS.white,
-        ...FONTS.h3,
-        fontWeight: 'bold',
-        fontSize: 16,
-    },
-    fabContainer: {
-        position: 'absolute',
-        bottom: 20,
-        right: 20,
-    },
-    extendedFab: {
+    desktopAddButtonGradient: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: COLORS.primary,
-        paddingVertical: 12,
         paddingHorizontal: 20,
-        borderRadius: 30,
-        elevation: 5,
-        shadowColor: COLORS.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 5,
+        height: 44,
+        gap: 8,
     },
-    fabText: {
-        color: COLORS.white,
-        ...FONTS.h4,
-        fontWeight: 'bold',
-        marginLeft: 8,
+    desktopAddButtonText: {
+        color: '#fff',
+        fontWeight: '700',
+        fontSize: 15,
     },
-    avatarImage: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
+    // Desktop Data Table Styles
+    desktopStatsRow: {
+        flexDirection: 'row',
+        gap: 16,
+        marginBottom: 24,
     },
-    courseChip: {
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
-        borderWidth: 1,
-        marginRight: 8,
-        marginBottom: 8,
-    },
-    courseChipText: {
-        fontSize: 12,
-        fontWeight: '500',
-    },
-    credentialsSection: {
-        padding: 15,
+    desktopStatCard: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 20,
         borderRadius: 16,
         borderWidth: 1,
-        marginBottom: SIZES.padding,
+        gap: 16,
+        ...(Platform.OS === 'web' && {
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+        }),
     },
-    sectionTitle: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        marginBottom: 10,
+    statIconBox: {
+        width: 48,
+        height: 48,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
-    generateBtn: {
+    statValue: {
+        fontSize: 26,
+        fontWeight: '700',
+        letterSpacing: -1,
+    },
+    statLabel: {
+        fontSize: 13,
+        marginTop: 2,
+    },
+    // Table cell styles
+    tableTeacherCell: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 4,
-        paddingHorizontal: 8,
+        gap: 12,
     },
-    generateBtnText: {
-        fontSize: 12,
+    tableAvatar: {
+        width: 40,
+        height: 40,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+    },
+    tableAvatarImg: {
+        width: 40,
+        height: 40,
+    },
+    tableAvatarText: {
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    tableTeacherName: {
+        fontSize: 14,
         fontWeight: '600',
-        marginLeft: 4,
-    }
+    },
+    tableTeacherSpec: {
+        fontSize: 12,
+        marginTop: 2,
+    },
+    statusBadgeTable: {
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 8,
+    },
+    statusTextTable: {
+        fontSize: 11,
+        fontWeight: '600',
+    },
+    countBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 6,
+        gap: 4,
+    },
+    tableActionBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+        ...(Platform.OS === 'web' && {
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+        }),
+    },
 });
 
 export default TeachersScreen;

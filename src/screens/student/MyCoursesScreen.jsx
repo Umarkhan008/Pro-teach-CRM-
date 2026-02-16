@@ -1,5 +1,6 @@
-import React, { useContext } from 'react';
-import { View, StyleSheet, FlatList, Text, TouchableOpacity } from 'react-native';
+import React, { useContext, useState, useCallback } from 'react';
+import { View, StyleSheet, FlatList, Text, TouchableOpacity, RefreshControl } from 'react-native';
+import * as Updates from 'expo-updates';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -36,6 +37,19 @@ const MyCoursesScreen = () => {
         }
     }
 
+    const [refreshing, setRefreshing] = useState(false);
+
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true);
+        try {
+            await Updates.reloadAsync();
+        } catch (e) {
+            console.log(e);
+        } finally {
+            setRefreshing(false);
+        }
+    }, []);
+
 
 
     // Custom Progress Bar for iOS compatibility
@@ -61,14 +75,11 @@ const MyCoursesScreen = () => {
                 <View style={styles.content}>
                     <View style={globalStyles.rowBetween}>
                         <Text style={[styles.title, { color: theme.text }]}>{item.title}</Text>
-                        <Text style={[styles.percentage, { color: item.color || COLORS.primary }]}>{Math.round(item.progress * 100)}%</Text>
+                        {/* Percentage removed as per request */}
                     </View>
-                    <Text style={[styles.instructor, { color: theme.textSecondary }]}>{item.instructor || 'Unknown Instructor'}</Text>
+                    <Text style={[styles.instructor, { color: theme.textSecondary }]}>{item.instructor || t.instructorNotAssigned}</Text>
 
-                    <View style={styles.progressContainer}>
-                        <CustomProgressBar progress={item.progress} color={item.color || COLORS.primary} />
-                        <Text style={[styles.lessons, { color: theme.textLight }]}>{item.completedLessons}/{item.totalLessons} {t.lessons}</Text>
-                    </View>
+                    {/* Progress bar removed as per request */}
                 </View>
             </View>
         </TouchableOpacity>
@@ -87,8 +98,11 @@ const MyCoursesScreen = () => {
                     showsVerticalScrollIndicator={false}
                     ListEmptyComponent={
                         <View style={{ alignItems: 'center', marginTop: 50 }}>
-                            <Text style={{ color: theme.textSecondary }}>{t.noCourses || "No courses assigned yet."}</Text>
+                            <Text style={{ color: theme.textSecondary }}>{t.noCourses}</Text>
                         </View>
+                    }
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} tintColor={COLORS.primary} />
                     }
                 />
             </View>

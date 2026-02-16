@@ -1,22 +1,37 @@
 import React, { useState, useContext } from 'react';
-import { View, StyleSheet, Text, Switch, TouchableOpacity, ScrollView, Alert, Image, ActionSheetIOS, Platform } from 'react-native';
+import { View, StyleSheet, Text, Switch, TouchableOpacity, ScrollView, Alert, Image, useWindowDimensions, Platform, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, Feather } from '@expo/vector-icons';
+import * as Linking from 'expo-linking';
+import * as Notifications from 'expo-notifications';
 
-import Header from '../components/Header';
 import { COLORS, SIZES, FONTS } from '../constants/theme';
 import globalStyles from '../styles/globalStyles';
 import { AuthContext } from '../context/AuthContext';
 import { ThemeContext } from '../context/ThemeContext';
 import { LanguageContext } from '../context/LanguageContext';
+import { InlineLoader } from '../components/loaders';
+import { SchoolContext } from '../context/SchoolContext';
+import EditProfileModal from './settings/components/EditProfileModal';
+import GoogleSheetsModal from './settings/components/GoogleSheetsModal';
+import PremiumModal from '../components/PremiumModal';
+import PremiumButton from '../components/PremiumButton';
 
-const SectionItem = ({ icon, title, type = 'link', value, onValueChange, color }) => {
+const SectionItem = ({ icon, title, type = 'link', value, onValueChange, color, subtitle }) => {
     const { theme } = useContext(ThemeContext);
     const itemColor = color || theme.text;
+    const [loading, setLoading] = useState(false);
+
+    const handleToggle = async (val) => {
+        setLoading(true);
+        // Simulate network request or wait for async storage
+        await onValueChange(val);
+        setLoading(false);
+    };
 
     return (
         <TouchableOpacity
-            style={[styles.item, { borderBottomColor: theme.background }]}
+            style={[styles.item, { borderBottomColor: theme.border }]}
             activeOpacity={(type === 'link' || type === 'danger') ? 0.7 : 1}
             onPress={(type === 'link' || type === 'danger') ? onValueChange : null}
         >
@@ -24,210 +39,401 @@ const SectionItem = ({ icon, title, type = 'link', value, onValueChange, color }
                 <View style={[styles.iconContainer, { backgroundColor: theme.background }]}>
                     <Ionicons name={icon} size={20} color={itemColor} />
                 </View>
-                <Text style={[styles.itemTitle, { color: type === 'danger' ? COLORS.danger : theme.text }]}>{title}</Text>
+                <View>
+                    <Text style={[styles.itemTitle, { color: type === 'danger' ? COLORS.danger : theme.text }]}>{title}</Text>
+                    {subtitle && <Text style={[styles.itemSubtitle, { color: theme.textSecondary }]}>{subtitle}</Text>}
+                </View>
             </View>
 
-            {type === 'toggle' ? (
-                <Switch
-                    trackColor={{ false: theme.border, true: COLORS.primaryLight }}
-                    thumbColor={value ? COLORS.primary : '#f4f3f4'}
-                    ios_backgroundColor="#3e3e3e"
-                    onValueChange={onValueChange}
-                    value={value}
-                />
-            ) : (
-                <Ionicons name="chevron-forward" size={20} color={theme.textLight} />
-            )}
+            <View style={styles.itemRight}>
+                {loading ? (
+                    <InlineLoader />
+                ) : type === 'toggle' ? (
+                    <Switch
+                        trackColor={{ false: theme.border, true: theme.primary + '80' }}
+                        thumbColor={value ? theme.primary : '#f4f3f4'}
+                        ios_backgroundColor="#3e3e3e"
+                        onValueChange={handleToggle}
+                        value={value}
+                    />
+                ) : (
+                    <Ionicons name="chevron-forward" size={20} color={theme.textLight} />
+                )}
+            </View>
         </TouchableOpacity>
     );
 };
 
-const SettingsScreen = ({ navigation }) => {
-    const { logout, userInfo } = useContext(AuthContext);
+const SettingsScreen = ({ navigation, route }) => {
+    const { width } = useWindowDimensions();
+    const isWeb = width > 900;
+    const { openSheetSettings } = route?.params || {};
+
+    const { logout, userInfo, updateProfile } = useContext(AuthContext);
+    const { appSettings, updateAppSettings } = useContext(SchoolContext);
     const { theme, isDarkMode, toggleTheme } = useContext(ThemeContext);
-    const { t, changeLanguage } = useContext(LanguageContext);
+    const { t, changeLanguage, language } = useContext(LanguageContext);
+
     const [notifications, setNotifications] = useState(true);
+    const [editModalVisible, setEditModalVisible] = useState(false);
+    const [gsModalVisible, setGsModalVisible] = useState(false);
+
+    // Web friendly modals
+    const [langModalVisible, setLangModalVisible] = useState(false);
+    const [logoutModalVisible, setLogoutModalVisible] = useState(false);
 
     const handleLanguagePress = () => {
-        Alert.alert(
-            t.selectLanguage,
-            "",
-            [
-                { text: "English", onPress: () => changeLanguage('en') },
-                { text: "Русский", onPress: () => changeLanguage('ru') },
-                { text: "O'zbekcha", onPress: () => changeLanguage('uz') },
-                { text: t.cancel, style: "cancel" }
-            ],
-            { cancelable: true }
-        );
+        if (Platform.OS === 'web') {
+            setLangModalVisible(true);
+        } else {
+            Alert.alert(
+                t ? t.selectLanguage : 'Tilni tanlang',
+                "",
+                [
+                    { text: "O'zbekcha", onPress: () => changeLanguage('uz') },
+                    { text: "Русский", onPress: () => changeLanguage('ru') },
+                    { text: "English", onPress: () => changeLanguage('en') },
+                    { text: t ? t.cancel : 'Bekor qilish', style: "cancel" }
+                ],
+                { cancelable: true }
+            );
+        }
     };
 
-    const handleFeaturePress = (featureName) => {
-        Alert.alert(featureName, "This feature is coming soon!");
+    const handleLogoutPress = () => {
+        if (Platform.OS === 'web') {
+            setLogoutModalVisible(true);
+        } else {
+            Alert.alert(
+                t ? t.logOutConfirmTitle : 'Chiqish',
+                t ? t.logOutConfirmMsg : 'Haqiqatdan ham tizimdan chiqmoqchimisiz?',
+                [
+                    { text: t ? t.cancel : 'Bekor qilish', style: 'cancel' },
+                    {
+                        text: t ? t.logOut : 'Chiqish',
+                        style: 'destructive',
+                        onPress: () => logout()
+                    }
+                ]
+            );
+        }
     };
 
-    const containerStyle = {
-        flex: 1,
-        backgroundColor: theme.background,
+    const sendTestNotification = async () => {
+        await Notifications.scheduleNotificationAsync({
+            content: {
+                title: "Salom! 🔔",
+                body: 'Bu Pro Teach ilovasi tomonidan yuborilgan sinov bildirishnomasi.',
+                data: { data: 'goes here' },
+            },
+            trigger: { seconds: 2 },
+        });
+        Alert.alert('Muvaffaqiyatli', 'Bildirishnoma 2 soniyadan so\'ng yuboriladi.');
     };
+
+    const handleProfileUpdate = async (data) => {
+        await updateProfile(data);
+    };
+
+    React.useEffect(() => {
+        if (openSheetSettings) {
+            setGsModalVisible(true);
+            navigation.setParams({ openSheetSettings: null }); // Reset param
+        }
+    }, [openSheetSettings]);
 
     return (
-        <SafeAreaView style={containerStyle} edges={['top']}>
-            <Header title={t.settings} />
+        <SafeAreaView style={[globalStyles.container, { backgroundColor: theme.background }]} edges={['top']}>
+            <View style={styles.header}>
+                {navigation.canGoBack() && (
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginRight: 15, padding: 8, backgroundColor: theme.surface, borderRadius: 12 }}>
+                        <Ionicons name="arrow-back" size={24} color={theme.text} />
+                    </TouchableOpacity>
+                )}
+                <Text style={[styles.headerTitle, { color: theme.text }]}>{t ? t.settings : 'Sozlamalar'}</Text>
+            </View>
 
-            <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
-                <View style={[globalStyles.screenPadding, { backgroundColor: theme.background }]}>
+            <ScrollView contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
+                <View style={globalStyles.screenPadding}>
 
-                    {/* Profile Section */}
-                    <View style={[styles.profileCard, globalStyles.shadow, { backgroundColor: theme.surface }]}>
-                        <View style={styles.avatar}>
+                    {/* Profile Card */}
+                    <View style={[styles.profileCard, { backgroundColor: theme.surface }]}>
+                        <View style={styles.avatarContainer}>
                             {userInfo?.avatar ? (
-                                <Image source={{ uri: userInfo.avatar }} style={{ width: 60, height: 60, borderRadius: 30 }} />
+                                <Image source={{ uri: userInfo.avatar }} style={styles.avatarImg} />
                             ) : (
-                                <Ionicons name="person" size={32} color={COLORS.surface} />
+                                <View style={[styles.avatarPlaceholder, { backgroundColor: theme.primary }]}>
+                                    <Text style={styles.avatarText}>{userInfo?.name ? userInfo.name[0].toUpperCase() : 'U'}</Text>
+                                </View>
                             )}
+                            <TouchableOpacity
+                                style={[styles.editIconBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                                onPress={() => setEditModalVisible(true)}
+                            >
+                                <Feather name="edit-2" size={14} color={theme.primary} />
+                            </TouchableOpacity>
                         </View>
-                        <View>
-                            <Text style={[styles.name, { color: theme.text }]}>{userInfo?.name || 'Guest User'}</Text>
-                            <Text style={[styles.role, { color: theme.textSecondary }]}>{userInfo?.role === 'admin' ? 'Administrator' : 'Student'}</Text>
+
+                        <View style={styles.profileInfo}>
+                            <Text style={[styles.profileName, { color: theme.text }]}>{userInfo?.name || 'Foydalanuvchi'}</Text>
+                            <View style={[styles.roleBadge, { backgroundColor: isDarkMode ? (userInfo?.role === 'admin' ? 'rgba(5, 150, 105, 0.2)' : 'rgba(79, 70, 229, 0.2)') : (userInfo?.role === 'admin' ? '#E8F7EE' : '#EEF0FF') }]}>
+                                <Text style={[styles.roleText, { color: userInfo?.role === 'admin' ? (isDarkMode ? '#3FB950' : '#27AE60') : (isDarkMode ? '#FF8F75' : '#5865F2') }]}>
+                                    {userInfo?.role === 'admin' ? 'Administrator' : (userInfo?.role === 'teacher' ? 'O\'qituvchi' : 'Talaba')}
+                                </Text>
+                            </View>
                         </View>
-                        <TouchableOpacity style={[styles.editBtn, { backgroundColor: theme.background }]}>
-                            <Ionicons name="pencil" size={16} color={COLORS.primary} />
-                        </TouchableOpacity>
                     </View>
 
-                    <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>{t.preferences}</Text>
-                    <View style={[styles.section, globalStyles.shadow, { backgroundColor: theme.surface }]}>
+                    {/* App Settings */}
+                    <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>{t ? t.preferences : 'Ilova Sozlamalari'}</Text>
+                    <View style={[styles.section, { backgroundColor: theme.surface }]}>
                         <SectionItem
                             icon="notifications-outline"
-                            title={t.pushNotifications}
+                            title={t ? t.pushNotifications : 'Bildirishnomalar'}
                             type="toggle"
                             value={notifications}
-                            onValueChange={setNotifications}
+                            onValueChange={(val) => setNotifications(val)}
                         />
                         <SectionItem
                             icon="moon-outline"
-                            title={t.darkMode}
+                            title={t ? t.darkMode : 'Tun rejimi'}
+                            subtitle={isDarkMode ? 'Yoqilgan' : 'O\'chirilgan'}
                             type="toggle"
                             value={isDarkMode}
                             onValueChange={toggleTheme}
                         />
                         <SectionItem
-                            icon="language-outline"
-                            title={t.language}
+                            icon="globe-outline"
+                            title={t ? t.language : 'Til'}
+                            subtitle={language === 'uz' ? 'O\'zbekcha' : (language === 'ru' ? 'Русский' : 'English')}
                             onValueChange={handleLanguagePress}
                         />
                     </View>
 
-                    <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>{t.support}</Text>
-                    <View style={[styles.section, globalStyles.shadow, { backgroundColor: theme.surface }]}>
+                    {/* Integrations (Visible to Admin & Teachers for setup) */}
+                    {(userInfo?.role === 'admin' || userInfo?.role === 'teacher') && (
+                        <>
+                            <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>{t ? t.integration : 'Integratsiyalar'}</Text>
+                            <View style={[styles.section, { backgroundColor: theme.surface }]}>
+                                <SectionItem
+                                    icon="grid-outline"
+                                    title="Google Sheets"
+                                    subtitle={appSettings?.enableGoogleSheets ? (language === 'uz' ? 'Yoqilgan' : 'Enabled') : (language === 'uz' ? 'O\'chirilgan' : 'Disabled')}
+                                    onValueChange={() => setGsModalVisible(true)}
+                                />
+                                <SectionItem
+                                    icon="flashlight-outline"
+                                    title="Test Bildirishnoma"
+                                    subtitle="Bildirishnomani tekshirish"
+                                    onValueChange={sendTestNotification}
+                                />
+                            </View>
+                        </>
+                    )}
+
+                    {/* Support */}
+                    <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>{t ? t.support : 'Yordam'}</Text>
+                    <View style={[styles.section, { backgroundColor: theme.surface }]}>
                         <SectionItem
                             icon="help-circle-outline"
-                            title={t.helpCenter}
-                            onValueChange={() => handleFeaturePress(t.helpCenter)}
+                            title={t ? t.helpCenter : 'Yordam markazi'}
+                            onValueChange={() => Linking.openURL('https://t.me/support_proteach')}
                         />
                         <SectionItem
                             icon="information-circle-outline"
-                            title={t.aboutApp}
-                            onValueChange={() => Alert.alert('Pro Teach', 'Version 1.0.0\nBuilt for educational excellence.')}
+                            title={t ? t.aboutApp : 'Ilova haqida'}
+                            onValueChange={() => Alert.alert('Pro Teach', 'Version 1.0.0\nEducation Management System')}
                         />
                     </View>
 
-                    <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>{t.account}</Text>
-                    <View style={[styles.section, globalStyles.shadow, { backgroundColor: theme.surface }]}>
+                    {/* Account */}
+                    <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>{t ? t.account : 'Hisob'}</Text>
+                    <View style={[styles.section, { backgroundColor: theme.surface }]}>
                         <SectionItem
                             icon="log-out-outline"
-                            title={t.logOut}
+                            title={t ? t.logOut : 'Chiqish'}
                             type="danger"
                             color={COLORS.danger}
-                            onValueChange={() => {
-                                Alert.alert(t.logOutConfirmTitle, t.logOutConfirmMsg, [
-                                    { text: t.cancel, style: 'cancel' },
-                                    { text: t.logOut, style: 'destructive', onPress: () => logout() }
-                                ]);
-                            }}
+                            onValueChange={handleLogoutPress}
                         />
                     </View>
 
-                    <Text style={[styles.version, { color: theme.textLight }]}>Version 1.0.0</Text>
-
+                    <Text style={[styles.version, { color: theme.textLight }]}>Pro Teach v1.0.0 (Build 102)</Text>
                 </View>
             </ScrollView>
+
+            <EditProfileModal
+                visible={editModalVisible}
+                onClose={() => setEditModalVisible(false)}
+                userInfo={userInfo}
+                onSave={handleProfileUpdate}
+            />
+
+            <GoogleSheetsModal
+                visible={gsModalVisible}
+                onClose={() => setGsModalVisible(false)}
+                settings={appSettings}
+                onSave={updateAppSettings}
+            />
+
+            {/* Language Modal */}
+            <PremiumModal
+                visible={langModalVisible}
+                onClose={() => setLangModalVisible(false)}
+                title={t ? t.selectLanguage : 'Tilni tanlang'}
+                subtitle="Dastur interfeysi tilini tanlang"
+            >
+                <TouchableOpacity style={styles.modalOption} onPress={() => { changeLanguage('uz'); setLangModalVisible(false); }}>
+                    <Text style={[styles.modalOptionText, { color: theme.text }]}>O'zbekcha</Text>
+                    {language === 'uz' && <Ionicons name="checkmark-circle" size={20} color={theme.primary} />}
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalOption} onPress={() => { changeLanguage('ru'); setLangModalVisible(false); }}>
+                    <Text style={[styles.modalOptionText, { color: theme.text }]}>Русский</Text>
+                    {language === 'ru' && <Ionicons name="checkmark-circle" size={20} color={theme.primary} />}
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalOption} onPress={() => { changeLanguage('en'); setLangModalVisible(false); }}>
+                    <Text style={[styles.modalOptionText, { color: theme.text }]}>English</Text>
+                    {language === 'en' && <Ionicons name="checkmark-circle" size={20} color={theme.primary} />}
+                </TouchableOpacity>
+            </PremiumModal>
+
+            {/* Logout Modal */}
+            <PremiumModal
+                visible={logoutModalVisible}
+                onClose={() => setLogoutModalVisible(false)}
+                title={t ? t.logOutConfirmTitle : 'Chiqish'}
+                subtitle={t ? t.logOutConfirmMsg : 'Haqiqatdan ham tizimdan chiqmoqchimisiz?'}
+                headerGradient={[COLORS.danger, '#d32f2f']}
+            >
+                <Ionicons name="log-out-outline" size={48} color={COLORS.danger} style={{ alignSelf: 'center', marginBottom: 15 }} />
+                <View style={styles.modalActionRow}>
+                    <PremiumButton
+                        title={t ? t.cancel : 'Bekor qilish'}
+                        onPress={() => setLogoutModalVisible(false)}
+                        type="outline"
+                        style={{ flex: 1 }}
+                    />
+                    <PremiumButton
+                        title={t ? t.logOut : 'Chiqish'}
+                        onPress={() => { logout(); setLogoutModalVisible(false); }}
+                        gradient={[COLORS.danger, '#d32f2f']}
+                        style={{ flex: 1 }}
+                    />
+                </View>
+            </PremiumModal>
         </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
+    header: { paddingHorizontal: 20, paddingVertical: 15, flexDirection: 'row', alignItems: 'center' },
+    headerTitle: { fontSize: 28, fontWeight: 'bold' },
+
     profileCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: SIZES.padding,
-        borderRadius: SIZES.radius,
-        marginBottom: SIZES.base * 3,
+        padding: 20,
+        borderRadius: 24,
+        marginBottom: 25,
+        elevation: 2,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8
     },
-    avatar: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        backgroundColor: COLORS.primary,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: SIZES.base * 2,
+    avatarContainer: { position: 'relative', marginRight: 20 },
+    avatarImg: { width: 70, height: 70, borderRadius: 35 },
+    avatarPlaceholder: { width: 70, height: 70, borderRadius: 35, alignItems: 'center', justifyContent: 'center' },
+    avatarText: { fontSize: 24, fontWeight: 'bold', color: 'white' },
+    editIconBtn: {
+        position: 'absolute', bottom: 0, right: 0,
+        width: 24, height: 24, borderRadius: 12,
+        alignItems: 'center', justifyContent: 'center',
+        borderWidth: 1, borderColor: '#eee'
     },
-    name: {
-        ...FONTS.h3,
-        marginBottom: 4,
-    },
-    role: {
-        ...FONTS.body4,
-    },
-    editBtn: {
-        position: 'absolute',
-        top: SIZES.padding,
-        right: SIZES.padding,
-        width: 30,
-        height: 30,
-        borderRadius: 15,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    sectionTitle: {
-        ...FONTS.h4,
-        marginBottom: SIZES.base,
-        marginLeft: 4,
-    },
-    section: {
-        borderRadius: SIZES.radius,
-        paddingHorizontal: SIZES.padding,
-        paddingVertical: SIZES.base,
-        marginBottom: SIZES.base * 3,
-    },
+    profileInfo: { flex: 1 },
+    profileName: { fontSize: 18, fontWeight: 'bold', marginBottom: 6 },
+    roleBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+    roleText: { fontSize: 12, fontWeight: 'bold' },
+
+    sectionTitle: { fontSize: 14, fontWeight: '600', marginBottom: 10, marginLeft: 5, textTransform: 'uppercase', letterSpacing: 0.5 },
+    section: { borderRadius: 20, paddingHorizontal: 5, marginBottom: 25, overflow: 'hidden' },
+
     item: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        paddingVertical: 16, paddingHorizontal: 15,
+        borderBottomWidth: 1
+    },
+    itemLeft: { flexDirection: 'row', alignItems: 'center' },
+    iconContainer: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginRight: 15 },
+    itemTitle: { fontSize: 16, fontWeight: '500' },
+    itemSubtitle: { fontSize: 12, marginTop: 2 },
+
+    itemRight: { minWidth: 40, alignItems: 'flex-end', justifyContent: 'center' },
+    version: { textAlign: 'center', fontSize: 12, marginTop: 10 },
+
+    // Custom Web Modals
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20
+    },
+    customModal: {
+        width: '100%',
+        maxWidth: 400,
+        borderRadius: 24,
+        padding: 24,
+        elevation: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.2,
+        shadowRadius: 20,
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        marginBottom: 20,
+    },
+    modalSubtitle: {
+        fontSize: 14,
+        lineHeight: 20,
+    },
+    modalOption: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingVertical: SIZES.base * 1.5,
+        paddingVertical: 15,
         borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.05)',
     },
-    itemLeft: {
+    modalOptionText: {
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    modalCloseBtn: {
+        marginTop: 25,
+        paddingVertical: 14,
+        borderRadius: 14,
+        alignItems: 'center',
+    },
+    modalCloseBtnText: {
+        color: 'white',
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    modalActionRow: {
         flexDirection: 'row',
+        gap: 12,
+    },
+    modalActionBtn: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 14,
         alignItems: 'center',
     },
-    iconContainer: {
-        width: 32,
-        height: 32,
-        borderRadius: 8,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: SIZES.base * 1.5,
+    modalActionBtnText: {
+        fontSize: 15,
+        fontWeight: 'bold',
     },
-    itemTitle: {
-        ...FONTS.body3,
-    },
-    version: {
-        textAlign: 'center',
-        ...FONTS.small,
-    }
 });
 
 export default SettingsScreen;

@@ -20,8 +20,8 @@ export const ThemeProvider = ({ children }) => {
                 if (savedTheme !== null) {
                     setIsDarkMode(savedTheme === 'dark');
                 } else {
-                    // Default to system preference
-                    setIsDarkMode(systemScheme === 'dark');
+                    // Default to light mode as requested
+                    setIsDarkMode(false);
                 }
             } catch (e) {
                 console.log('Failed to load theme', e);

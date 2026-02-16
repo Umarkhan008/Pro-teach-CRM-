@@ -19,7 +19,14 @@ const ListItem = ({ title, subtitle, image, icon, rightElement, onPress, onLongP
                 {image ? (
                     <Image source={{ uri: image }} style={styles.avatar} />
                 ) : (
-                    <Ionicons name={icon || "person"} size={22} color={color || COLORS.primary} />
+                    <View style={styles.placeholderContent}>
+                        <Text style={[styles.initials, { color: color || COLORS.primary }]}>
+                            {title ? title.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : (icon ? null : '?')}
+                        </Text>
+                        {icon && !title && <Ionicons name={icon} size={22} color={color || COLORS.primary} />}
+                        {/* Geometric Decoration */}
+                        <View style={[styles.decoration, { backgroundColor: color || COLORS.primary, opacity: 0.1 }]} />
+                    </View>
                 )}
             </View>
 
@@ -67,6 +74,27 @@ const styles = StyleSheet.create({
     subtitle: {
         ...FONTS.body4,
     },
+    placeholderContent: {
+        width: '100%',
+        height: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative',
+    },
+    initials: {
+        ...FONTS.h4,
+        fontWeight: 'bold',
+        zIndex: 2,
+    },
+    decoration: {
+        position: 'absolute',
+        bottom: -5,
+        right: -5,
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        zIndex: 1,
+    }
 });
 
 export default ListItem;
