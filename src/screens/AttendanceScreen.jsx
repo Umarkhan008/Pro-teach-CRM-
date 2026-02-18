@@ -12,7 +12,8 @@ import {
     Platform,
     UIManager,
     ScrollView,
-    useWindowDimensions
+    useWindowDimensions,
+    Alert
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -160,15 +161,15 @@ const AttendanceScreen = ({ route, navigation }) => {
 
             if (isEditing && existingId) {
                 await updateAttendance(existingId, finalAttendance);
-                alert(t.davomatTahrirlangan);
+                Alert.alert("Muvaffaqiyatli", t.davomatTahrirlangan);
             } else {
                 await saveAttendance(finalAttendance);
-                alert(`${t.davomatSaqlangan}!\nTalabalar balansidan kunlik to'lovlar yechildi.\n\n${t.keldi}: ${presentCount} \n${t.kelmadi}: ${absentCount}`);
+                Alert.alert("Muvaffaqiyatli", `${t.davomatSaqlangan}!\n\n${t.keldi}: ${presentCount} \n${t.kelmadi}: ${absentCount}`);
             }
             navigation.goBack();
         } catch (error) {
             console.error(error);
-            alert(t.xatolikYuzBerdi);
+            Alert.alert("Xatolik", t.xatolikYuzBerdi);
         } finally {
             hideLoader();
         }

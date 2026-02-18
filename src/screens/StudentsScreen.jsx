@@ -142,20 +142,33 @@ const StudentsScreen = ({ navigation, route, isDarkMode }) => {
     };
 
     const handleDelete = (id) => {
-        Alert.alert(
-            'O\'chirish',
-            'Haqiqatdan ham bu o\'quvchini o\'chirmoqchimisiz?',
-            [
-                { text: 'Yo\'q' },
-                {
-                    text: 'Ha', style: 'destructive', onPress: async () => {
-                        showLoader('O\'chirilmoqda...');
-                        await deleteStudent(id);
-                        hideLoader();
+        const confirmAnddelete = async () => {
+            try {
+                showLoader('O\'chirilmoqda...');
+                await deleteStudent(id);
+            } catch (error) {
+                // Error is handled in context
+            } finally {
+                hideLoader();
+            }
+        };
+
+        if (Platform.OS === 'web') {
+            if (window.confirm("Haqiqatdan ham bu o'quvchini o'chirmoqchimisiz?")) {
+                confirmAnddelete();
+            }
+        } else {
+            Alert.alert(
+                'O\'chirish',
+                'Haqiqatdan ham bu o\'quvchini o\'chirmoqchimisiz?',
+                [
+                    { text: 'Yo\'q' },
+                    {
+                        text: 'Ha', style: 'destructive', onPress: confirmAnddelete
                     }
-                }
-            ]
-        );
+                ]
+            );
+        }
     };
 
     // Format balance for display

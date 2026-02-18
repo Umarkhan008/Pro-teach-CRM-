@@ -230,12 +230,13 @@ export const SchoolProvider = ({ children }) => {
 
     const deleteStudent = async (id) => {
         try {
-            const batch = writeBatch(db);
-            batch.delete(doc(db, 'students', id));
-            updateGlobalStats({ totalStudents: increment(-1) }, batch);
-            await batch.commit();
+            await deleteDoc(doc(db, 'students', id));
+            // Update stats independently
+            updateGlobalStats({ totalStudents: increment(-1) });
         } catch (e) {
             console.error("Error deleting student: ", e);
+            Alert.alert("Xatolik", "O'quvchini o'chirishda xatolik yuz berdi");
+            throw e;
         }
     };
 

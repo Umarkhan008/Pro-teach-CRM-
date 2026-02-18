@@ -30,7 +30,7 @@ import { useUI } from '../context/UIContext';
 
 const CourseDetailScreen = ({ route, navigation }) => {
     const { width } = useWindowDimensions();
-    const { courses, students, attendance, deleteCourse, updateCourse, appSettings } = useContext(SchoolContext);
+    const { courses, students, attendance, deleteCourse, updateCourse, updateStudent, appSettings } = useContext(SchoolContext);
     const { t } = useContext(LanguageContext);
     const { theme, isDarkMode } = useContext(ThemeContext);
     const { showLoader, hideLoader } = useUI();
@@ -164,6 +164,49 @@ const CourseDetailScreen = ({ route, navigation }) => {
                 }
             ]
         );
+    };
+
+    const handleRemoveFromGroup = (student) => {
+        const performRemove = async () => {
+            try {
+                showLoader('Guruhdan chiqarilmoqda...');
+                await updateStudent(student.id, {
+                    assignedCourseId: null,
+                    course: 'Guruhsiz',
+                    status: 'Waiting'
+                });
+                if (Platform.OS === 'web') {
+                    alert(`${student.name} guruhdan chiqarildi`);
+                } else {
+                    Alert.alert('Muvaffaqiyatli', `${student.name} guruhdan chiqarildi`);
+                }
+            } catch (error) {
+                if (Platform.OS === 'web') {
+                    alert('Xatolik yuz berdi');
+                } else {
+                    Alert.alert('Xatolik', 'Guruhdan chiqarishda xatolik yuz berdi');
+                }
+            } finally {
+                hideLoader();
+            }
+        };
+
+        const message = `${student.name}ni "${course.title}" guruhidan chiqarmoqchimisiz?\nTalaba tizimda saqlanib qoladi.`;
+
+        if (Platform.OS === 'web') {
+            if (window.confirm(message)) {
+                performRemove();
+            }
+        } else {
+            Alert.alert(
+                'Guruhdan chiqarish',
+                message,
+                [
+                    { text: 'Yo\'q', style: 'cancel' },
+                    { text: 'Ha, chiqarish', style: 'destructive', onPress: performRemove }
+                ]
+            );
+        }
     };
 
     const handleAttendancePress = async () => {
@@ -394,33 +437,62 @@ const CourseDetailScreen = ({ route, navigation }) => {
 
                                     {/* Students Grid */}
                                     <View style={styles.desktopStudentsGrid}>
-                                        {filteredStudents.map((s, idx) => (
-                                            <TouchableOpacity
-                                                key={s.id}
-                                                style={styles.desktopStudentCard}
-                                                onPress={() => navigation.navigate('StudentDetail', { student: s })}
-                                            >
-                                                <View style={[styles.desktopStudentAvatar, { backgroundColor: theme.primary + '20' }]}>
-                                                    <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 14 }}>
-                                                        {(() => {
-                                                            if (!s.name) return '?';
-                                                            const parts = s.name.trim().split(/\s+/);
-                                                            if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-                                                            return parts[0][0].toUpperCase();
-                                                        })()}
-                                                    </Text>
+                                        {filteredStudents.map((s, idx) => {
+                                            const balance = s.balance || 0;
+                                            const isDebtor = balance < 0;
+                                            return (
+                                                <View
+                                                    key={s.id}
+                                                    style={styles.desktopStudentCard}
+                                                >
+                                                    <TouchableOpacity
+                                                        style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 }}
+                                                        onPress={() => navigation.navigate('StudentDetail', { student: s })}
+                                                    >
+                                                        <View style={[styles.desktopStudentAvatar, { backgroundColor: theme.primary + '20' }]}>
+                                                            <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 14 }}>
+                                                                {(() => {
+                                                                    if (!s.name) return '?';
+                                                                    const parts = s.name.trim().split(/\s+/);
+                                                                    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+                                                                    return parts[0][0].toUpperCase();
+                                                                })()}
+                                                            </Text>
+                                                        </View>
+                                                        <View style={{ flex: 1 }}>
+                                                            <Text style={styles.desktopStudentName}>{s.name}</Text>
+                                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                                                                <View style={[styles.desktopStudentBadge, { backgroundColor: s.status === 'Active' ? '#10B98115' : '#EF444415' }]}>
+                                                                    <Text style={{ color: s.status === 'Active' ? '#10B981' : '#EF4444', fontSize: 10, fontWeight: '600' }}>
+                                                                        {s.status === 'Active' ? t.active_status : t.pending}
+                                                                    </Text>
+                                                                </View>
+                                                                <Text style={{ fontSize: 11, color: isDebtor ? '#EF4444' : '#27AE60', fontWeight: '600' }}>
+                                                                    {isDebtor ? '-' : ''}{Math.abs(balance).toLocaleString()} UZS
+                                                                </Text>
+                                                            </View>
+                                                        </View>
+                                                    </TouchableOpacity>
+                                                    <TouchableOpacity
+                                                        style={{
+                                                            paddingHorizontal: 12,
+                                                            paddingVertical: 8,
+                                                            borderRadius: 10,
+                                                            backgroundColor: isDarkMode ? 'rgba(239, 68, 68, 0.08)' : '#FFF5F5',
+                                                            borderWidth: 1,
+                                                            borderColor: isDarkMode ? 'rgba(239, 68, 68, 0.15)' : '#FFE0E0',
+                                                            flexDirection: 'row',
+                                                            alignItems: 'center',
+                                                            gap: 6,
+                                                        }}
+                                                        onPress={() => handleRemoveFromGroup(s)}
+                                                    >
+                                                        <Ionicons name="person-remove-outline" size={16} color={'#EF4444'} />
+                                                        <Text style={{ color: '#EF4444', fontSize: 12, fontWeight: '600' }}>Chiqarish</Text>
+                                                    </TouchableOpacity>
                                                 </View>
-                                                <View style={{ flex: 1 }}>
-                                                    <Text style={styles.desktopStudentName}>{s.name}</Text>
-                                                    <View style={[styles.desktopStudentBadge, { backgroundColor: s.status === 'Active' ? '#10B98115' : '#EF444415' }]}>
-                                                        <Text style={{ color: s.status === 'Active' ? '#10B981' : '#EF4444', fontSize: 10, fontWeight: '600' }}>
-                                                            {s.status === 'Active' ? t.active_status : t.pending}
-                                                        </Text>
-                                                    </View>
-                                                </View>
-                                                <Ionicons name="chevron-forward" size={18} color={theme.textLight} />
-                                            </TouchableOpacity>
-                                        ))}
+                                            );
+                                        })}
                                         {filteredStudents.length === 0 && (
                                             <View style={styles.desktopEmptyStudents}>
                                                 <Ionicons name="people-outline" size={48} color={theme.border} />
@@ -533,50 +605,72 @@ const CourseDetailScreen = ({ route, navigation }) => {
 
                             {/* Student List */}
                             <View style={styles.studentList}>
-                                {filteredStudents.map((s, idx) => (
-                                    <TouchableOpacity
-                                        key={s.id}
-                                        style={[styles.studentRow, idx === filteredStudents.length - 1 && { borderBottomWidth: 0 }]}
-                                        onPress={() => navigation.navigate('StudentDetail', { student: s })}
-                                    >
-                                        <View style={[styles.studentAvatar, {
-                                            backgroundColor: theme.primary + '20',
-                                            alignItems: 'center',
-                                            justifyContent: 'center'
-                                        }]}>
-                                            <Text style={{
-                                                color: theme.primary,
-                                                fontSize: 16,
-                                                fontWeight: 'bold'
-                                            }}>
-                                                {(() => {
-                                                    if (!s.name) return '?';
-                                                    const parts = s.name.trim().split(/\s+/);
-                                                    if (parts.length >= 2) {
-                                                        return (parts[0][0] + parts[1][0]).toUpperCase();
-                                                    }
-                                                    return parts[0][0].toUpperCase();
-                                                })()}
-                                            </Text>
-                                        </View>
-                                        <View style={styles.studentDetails}>
-                                            <Text style={styles.studentName}>{s.name}</Text>
-                                            <View style={styles.studentMeta}>
-                                                <View style={[styles.miniBadge, { backgroundColor: s.status === 'Active' ? (isDarkMode ? 'rgba(5, 150, 105, 0.2)' : '#E8F5E9') : (isDarkMode ? 'rgba(239, 68, 68, 0.2)' : '#FFEBEE') }]}>
-                                                    <Text style={[styles.miniBadgeText, { color: s.status === 'Active' ? (isDarkMode ? '#3FB950' : '#4CAF50') : (isDarkMode ? '#FF8F75' : '#D32F2F') }]}>
-                                                        {s.status === 'Active' ? t.active_status : t.pending}
+                                {filteredStudents.map((s, idx) => {
+                                    const balance = s.balance || 0;
+                                    const isDebtor = balance < 0;
+                                    return (
+                                        <View
+                                            key={s.id}
+                                            style={[styles.studentRow, idx === filteredStudents.length - 1 && { borderBottomWidth: 0 }]}
+                                        >
+                                            <TouchableOpacity
+                                                style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+                                                onPress={() => navigation.navigate('StudentDetail', { student: s })}
+                                            >
+                                                <View style={[styles.studentAvatar, {
+                                                    backgroundColor: theme.primary + '20',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center'
+                                                }]}>
+                                                    <Text style={{
+                                                        color: theme.primary,
+                                                        fontSize: 16,
+                                                        fontWeight: 'bold'
+                                                    }}>
+                                                        {(() => {
+                                                            if (!s.name) return '?';
+                                                            const parts = s.name.trim().split(/\s+/);
+                                                            if (parts.length >= 2) {
+                                                                return (parts[0][0] + parts[1][0]).toUpperCase();
+                                                            }
+                                                            return parts[0][0].toUpperCase();
+                                                        })()}
                                                     </Text>
                                                 </View>
-                                            </View>
+                                                <View style={styles.studentDetails}>
+                                                    <Text style={styles.studentName}>{s.name}</Text>
+                                                    <View style={[styles.studentMeta, { gap: 6 }]}>
+                                                        <View style={[styles.miniBadge, { backgroundColor: s.status === 'Active' ? (isDarkMode ? 'rgba(5, 150, 105, 0.2)' : '#E8F5E9') : (isDarkMode ? 'rgba(239, 68, 68, 0.2)' : '#FFEBEE') }]}>
+                                                            <Text style={[styles.miniBadgeText, { color: s.status === 'Active' ? (isDarkMode ? '#3FB950' : '#4CAF50') : (isDarkMode ? '#FF8F75' : '#D32F2F') }]}>
+                                                                {s.status === 'Active' ? t.active_status : t.pending}
+                                                            </Text>
+                                                        </View>
+                                                        <Text style={{ fontSize: 11, color: isDebtor ? theme.error : '#27AE60', fontWeight: '600' }}>
+                                                            {isDebtor ? '-' : ''}{Math.abs(balance).toLocaleString()} UZS
+                                                        </Text>
+                                                    </View>
+                                                </View>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                style={{
+                                                    paddingHorizontal: 10,
+                                                    paddingVertical: 8,
+                                                    borderRadius: 10,
+                                                    backgroundColor: isDarkMode ? 'rgba(239, 68, 68, 0.1)' : '#FFF0F0',
+                                                    borderWidth: 1,
+                                                    borderColor: isDarkMode ? 'rgba(239, 68, 68, 0.2)' : '#FFE0E0',
+                                                }}
+                                                onPress={() => handleRemoveFromGroup(s)}
+                                            >
+                                                <Ionicons name="person-remove-outline" size={18} color={theme.error || '#EF4444'} />
+                                            </TouchableOpacity>
                                         </View>
-                                        <TouchableOpacity style={styles.rowAction}>
-                                            <Ionicons name="chevron-forward" size={20} color={theme.textLight} />
-                                        </TouchableOpacity>
-                                    </TouchableOpacity>
-                                ))}
+                                    );
+                                })}
                                 {filteredStudents.length === 0 && (
                                     <View style={styles.emptyList}>
-                                        <Text style={styles.emptyText}>{t.noResults}</Text>
+                                        <Ionicons name="people-outline" size={40} color={theme.border} />
+                                        <Text style={[styles.emptyText, { marginTop: 10 }]}>{t.noResults}</Text>
                                     </View>
                                 )}
                             </View>

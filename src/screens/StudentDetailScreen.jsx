@@ -161,25 +161,74 @@ const StudentDetailScreen = ({ route, navigation }) => {
         }
     };
 
-    const confirmDelete = () => {
-        Alert.alert(
-            'O\'chirish',
-            'Haqiqatdan ham bu o\'quvchini o\'chirmoqchimisiz?',
-            [
-                { text: 'Yo\'q' },
-                {
-                    text: 'Ha', style: 'destructive', onPress: async () => {
-                        try {
-                            showLoader('O\'chirilmoqda...');
-                            await deleteStudent(student.id);
-                            navigation.goBack();
-                        } finally {
-                            hideLoader();
-                        }
-                    }
+    const confirmRemovefromGroup = () => {
+        const performRemove = async () => {
+            try {
+                showLoader('Guruhdan chiqarilmoqda...');
+                await updateStudent(student.id, {
+                    assignedCourseId: null,
+                    course: 'Guruhsiz',
+                    status: 'Waiting'
+                });
+                if (Platform.OS === 'web') {
+                    alert('Talaba guruhdan chiqarildi');
+                } else {
+                    Alert.alert('Muvaffaqiyatli', 'Talaba guruhdan chiqarildi');
                 }
-            ]
-        );
+            } catch (error) {
+                if (Platform.OS === 'web') {
+                    alert('Guruhdan chiqarishda xatolik yuz berdi');
+                } else {
+                    Alert.alert('Xatolik', 'Guruhdan chiqarishda xatolik yuz berdi');
+                }
+            } finally {
+                hideLoader();
+            }
+        };
+
+        const message = "Haqiqatdan ham bu o'quvchini guruhdan chiqarmoqchimisiz? Talaba tizimda saqlanib qoladi.";
+
+        if (Platform.OS === 'web') {
+            if (window.confirm(message)) {
+                performRemove();
+            }
+        } else {
+            Alert.alert(
+                'Guruhdan chiqarish',
+                message,
+                [
+                    { text: 'Yo\'q' },
+                    { text: 'Ha', style: 'destructive', onPress: performRemove }
+                ]
+            );
+        }
+    };
+
+    const confirmDelete = () => {
+        const performDelete = async () => {
+            try {
+                showLoader('O\'chirilmoqda...');
+                await deleteStudent(student.id);
+                navigation.goBack();
+            } finally {
+                hideLoader();
+            }
+        };
+
+        if (Platform.OS === 'web') {
+            if (window.confirm("Haqiqatdan ham bu o'quvchini o'chirmoqchimisiz?")) {
+                performDelete();
+            }
+        } else {
+            Alert.alert(
+                'O\'chirish',
+                'Haqiqatdan ham bu o\'quvchini o\'chirmoqchimisiz?',
+                [
+                    { text: 'Yo\'q' },
+                    { text: 'Ha', style: 'destructive', onPress: performDelete }
+                ]
+            );
+        }
     };
 
     const InfoRow = ({ icon, label, value, isPassword }) => (
@@ -498,12 +547,21 @@ const StudentDetailScreen = ({ route, navigation }) => {
                         <Text style={[styles.actionLabel, { color: theme.textSecondary }]}>To'lov</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.actionItem} onPress={() => setAttendanceModalVisible(true)}>
-                        <View style={[styles.actionIcon, { backgroundColor: isDarkMode ? 'rgba(88, 101, 242, 0.15)' : '#EEF0FF' }]}>
-                            <Ionicons name="clipboard-outline" size={24} color="#5865F2" />
-                        </View>
-                        <Text style={[styles.actionLabel, { color: theme.textSecondary }]}>Davomat</Text>
-                    </TouchableOpacity>
+                    {assignedCourse ? (
+                        <TouchableOpacity style={styles.actionItem} onPress={confirmRemovefromGroup}>
+                            <View style={[styles.actionIcon, { backgroundColor: isDarkMode ? 'rgba(255, 159, 67, 0.15)' : '#FFF3E0' }]}>
+                                <Ionicons name="person-remove-outline" size={24} color="#FF9F43" />
+                            </View>
+                            <Text style={[styles.actionLabel, { color: theme.textSecondary, textAlign: 'center', fontSize: 11 }]}>Guruhdan chiqarish</Text>
+                        </TouchableOpacity>
+                    ) : (
+                        <TouchableOpacity style={styles.actionItem} onPress={() => setAttendanceModalVisible(true)}>
+                            <View style={[styles.actionIcon, { backgroundColor: isDarkMode ? 'rgba(88, 101, 242, 0.15)' : '#EEF0FF' }]}>
+                                <Ionicons name="clipboard-outline" size={24} color="#5865F2" />
+                            </View>
+                            <Text style={[styles.actionLabel, { color: theme.textSecondary }]}>Davomat</Text>
+                        </TouchableOpacity>
+                    )}
 
                     <TouchableOpacity style={styles.actionItem} onPress={confirmDelete}>
                         <View style={[styles.actionIcon, { backgroundColor: isDarkMode ? 'rgba(239, 68, 68, 0.15)' : '#FFF0F0' }]}>
@@ -536,6 +594,12 @@ const StudentDetailScreen = ({ route, navigation }) => {
                                         <Text style={[styles.metaText, { color: theme.textLight }]}>{assignedCourse.days}</Text>
                                     </View>
                                 </View>
+                                <TouchableOpacity
+                                    style={{ marginTop: 12, paddingVertical: 6, width: 140, backgroundColor: theme.error + '15', borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: theme.error + '30' }}
+                                    onPress={confirmRemovefromGroup}
+                                >
+                                    <Text style={{ color: theme.error, fontSize: 12, fontWeight: '600' }}>Guruhdan chiqarish</Text>
+                                </TouchableOpacity>
                             </View>
                         </View>
                     ) : (

@@ -1,26 +1,32 @@
-import React, { useContext } from 'react';
+import React, { useContext, useEffect } from 'react';
 import { View, StyleSheet, Platform, useWindowDimensions, Animated } from 'react-native';
 import WebSidebar from '../components/WebSidebar';
+import AiAssistantBot from '../components/AiAssistantBot';
 import { ThemeContext } from '../context/ThemeContext';
 import { useRoute } from '@react-navigation/native';
 import { useUI } from '../context/UIContext';
 
 const AdminLayout = ({ children, activeRoute: propActiveRoute }) => {
     // Inject global CSS to hide scrollbars on web
-    if (Platform.OS === 'web') {
-        const style = document.createElement('style');
-        style.type = 'text/css';
-        style.innerHTML = `
-            * {
-                -ms-overflow-style: none;
-                scrollbar-width: none;
-            }
-            *::-webkit-scrollbar {
-                display: none;
-            }
-        `;
-        document.head.appendChild(style);
-    }
+    useEffect(() => {
+        if (Platform.OS === 'web') {
+            const style = document.createElement('style');
+            style.type = 'text/css';
+            style.innerHTML = `
+                * {
+                    -ms-overflow-style: none;
+                    scrollbar-width: none;
+                }
+                *::-webkit-scrollbar {
+                    display: none;
+                }
+            `;
+            document.head.appendChild(style);
+            return () => {
+                document.head.removeChild(style);
+            };
+        }
+    }, []);
 
     const { theme, isDarkMode } = useContext(ThemeContext);
     const route = useRoute();
@@ -37,6 +43,7 @@ const AdminLayout = ({ children, activeRoute: propActiveRoute }) => {
         return (
             <View style={[styles.mobileContainer, { backgroundColor: theme.background }]}>
                 {children}
+                <AiAssistantBot />
             </View>
         );
     }
@@ -64,6 +71,9 @@ const AdminLayout = ({ children, activeRoute: propActiveRoute }) => {
             ]}>
                 {children}
             </View>
+
+            {/* AI Assistant Bot */}
+            <AiAssistantBot />
         </View>
     );
 };
